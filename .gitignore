@@ -1,0 +1,16 @@
+# Everything starts with a dot
+.*
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+
+# Exclude these files
+!.gitignore
+!.python-version
+!.dockerignore
