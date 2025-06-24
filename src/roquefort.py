@@ -72,19 +72,32 @@ class Roquefort:
         try:
             with self._app.connection() as connection:
                 recv = self._app.events.Receiver(connection, handlers=handlers)
+                loop = asyncio.get_event_loop()
+                
                 while not self._shutdown_event.is_set():
                     try:
                         logging.warning("Updating metrics")
-                        recv.capture(limit=None, timeout=1, wakeup=True)
+                        # Use run_in_executor to avoid blocking the event loop
+                        await loop.run_in_executor(
+                            None, 
+                            lambda: recv.capture(limit=None, timeout=1, wakeup=True)
+                        )
                     except socket.timeout:
                         # Timeout is expected, just continue
                         continue
+                    except (KeyboardInterrupt, SystemExit):
+                        logging.info("Shutdown signal received in metrics collection")
+                        self._shutdown_event.set()
+                        break
                     except Exception as e:
                         if self._shutdown_event.is_set():
                             break
                         logging.exception(f"Error in update_metrics: {e}")
                         await asyncio.sleep(1)
                         
+        except (KeyboardInterrupt, SystemExit):
+            logging.info("Shutdown signal received, stopping metrics collection")
+            self._shutdown_event.set()
         except Exception as e:
             if not self._shutdown_event.is_set():
                 logging.exception(f"Fatal error in update_metrics: {e}")
@@ -103,8 +116,7 @@ class Roquefort:
             
             # Start metrics collection
             await self.update_metrics()
-                
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, SystemExit):
             logging.info("Shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
