@@ -20,14 +20,11 @@ class HttpServer:
         self._host = host
         self._port = port
         self._registry = registry
-        self._server_started = False
 
     async def run(self):
-        if not self._server_started:
-            logging.info(f"Starting HTTP server on {self._host}:{self._port}")
-            start_http_server(addr=self._host, port=self._port, registry=self._registry)
-            logging.info(f"HTTP server started on {self._host}:{self._port}")
-            self._server_started = True
+        logging.info(f"Starting HTTP server on {self._host}:{self._port}")
+        start_http_server(addr=self._host, port=self._port, registry=self._registry)
+        logging.info(f"HTTP server started on {self._host}:{self._port}")
         await asyncio.sleep(1)
 
 
