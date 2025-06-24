@@ -77,7 +77,7 @@ wheels = [
 [[package]]
 name = "celery-roquefort"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "celery" },
     { name = "click" },
