@@ -46,3 +46,6 @@ class MetricService:
     def create_histogram(self, name: str, description: str, labels: list[str] = [], buckets: tuple = None):
         labels = labels + self._custom_labels_keys
         self.histograms[name] = prom.Histogram(name=f"{self.metric_prefix}{name}", documentation=description, buckets=buckets or prom.Histogram.DEFAULT_BUCKETS, labelnames=labels, registry=self._registry)
+    
+    def get_registry(self):
+        return self._registry

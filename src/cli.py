@@ -1,3 +1,4 @@
+import asyncio
 import click
 import json
 import sys
@@ -176,7 +177,7 @@ def main(env_prefix: str, broker_url: str, host: str, port: int, prefix: str, cu
         click.echo(f"🏥 Health check at: http://{host}:{port}/health-check")
         click.echo("Press Ctrl+C to stop")
         
-        roquefort.run()
+        asyncio.run(roquefort.run())
         
     except KeyboardInterrupt:
         click.echo("\n👋 Roquefort stopped gracefully")
