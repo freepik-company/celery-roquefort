@@ -19,13 +19,15 @@ class Roquefort:
         host: str,
         port: int,
         prefix: str = "roquefort_",
-        custom_labels: dict = None
+        custom_labels: dict = None,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
-            metric_prefix=prefix, custom_labels=custom_labels)
+            metric_prefix=prefix, custom_labels=custom_labels
+        )
         self._server: HttpServer = HttpServer(
-            host=host, port=port, registry=self._metrics.get_registry())
+            host=host, port=port, registry=self._metrics.get_registry()
+        )
         self._app: Celery = None
         self._state: Celery.events.State = None
         self._shutdown_event = asyncio.Event()
@@ -34,43 +36,87 @@ class Roquefort:
 
         # Create metrics
         #   Counters
-        self._metrics.create_counter("task_sent", "Sent when a task message is published.", labels=[
-                                     "name", "hostname", "queue_name"])
-        self._metrics.create_counter("task_received", "Received when a task message is received.", labels=[
-                                     "name", "hostname", "queue_name"])
-        self._metrics.create_counter("task_started", "Sent just before a worker runs a task.", labels=[
-                                     "name", "hostname", "queue_name"])
-        self._metrics.create_counter("task_succeeded", "Sent if the task was executed successfully.", labels=[
-                                     "name", "hostname", "queue_name"])
-        self._metrics.create_counter("task_failed", "Sent if the task failed.", labels=[
-                                     "name", "hostname", "queue_name", "exception"])
-        self._metrics.create_counter("task_retried", "Sent if the task was retried.", labels=[
-                                     "name", "hostname", "queue_name", "exception"])
-        self._metrics.create_counter("task_rejected", "Sent if the task was rejected.", labels=[
-                                     "name", "hostname", "queue_name", "exception"])
-        self._metrics.create_counter("task_revoked", "Sent if the task was revoked.", labels=[
-                                     "name", "hostname", "queue_name", "exception"])
+        self._metrics.create_counter(
+            "task_sent",
+            "Sent when a task message is published.",
+            labels=["name", "hostname", "queue_name"],
+        )
+        self._metrics.create_counter(
+            "task_received",
+            "Received when a task message is received.",
+            labels=["name", "hostname", "queue_name"],
+        )
+        self._metrics.create_counter(
+            "task_started",
+            "Sent just before a worker runs a task.",
+            labels=["name", "hostname", "queue_name"],
+        )
+        self._metrics.create_counter(
+            "task_succeeded",
+            "Sent if the task was executed successfully.",
+            labels=["name", "hostname", "queue_name"],
+        )
+        self._metrics.create_counter(
+            "task_failed",
+            "Sent if the task failed.",
+            labels=["name", "hostname", "queue_name", "exception"],
+        )
+        self._metrics.create_counter(
+            "task_retried",
+            "Sent if the task was retried.",
+            labels=["name", "hostname", "queue_name", "exception"],
+        )
+        self._metrics.create_counter(
+            "task_rejected",
+            "Sent if the task was rejected.",
+            labels=["name", "hostname", "queue_name", "exception"],
+        )
+        self._metrics.create_counter(
+            "task_revoked",
+            "Sent if the task was revoked.",
+            labels=["name", "hostname", "queue_name", "exception"],
+        )
         #   Gauges
-        self._metrics.create_gauge("worker_active", "Number of active workers. It indicates that the worker has recently sent a heartbeat.", labels=[
-                                   "hostname", "queue_name"])
-        self._metrics.create_gauge("worker_tasks_active", "Number of tasks currently being processed by the workers.", labels=[
-                                   "hostname", "queue_name"])
         self._metrics.create_gauge(
-            "queue_length", "Number of tasks in the queue.", labels=["queue_name"])
+            "worker_active",
+            "Number of active workers. It indicates that the worker has recently sent a heartbeat.",
+            labels=["hostname", "queue_name"],
+        )
         self._metrics.create_gauge(
-            "active_consumer_count", "The number of active consumer in broker queue.", labels=["queue_name"])
+            "worker_tasks_active",
+            "Number of tasks currently being processed by the workers.",
+            labels=["hostname", "queue_name"],
+        )
         self._metrics.create_gauge(
-            "active_worker_count", "The number of active workers in broker queue.", labels=["queue_name"])
+            "queue_length", "Number of tasks in the queue.", labels=["queue_name"]
+        )
         self._metrics.create_gauge(
-            "active_process_count", "The number of active processes in broker queue.", labels=["queue_name"])
+            "active_consumer_count",
+            "The number of active consumer in broker queue.",
+            labels=["queue_name"],
+        )
+        self._metrics.create_gauge(
+            "active_worker_count",
+            "The number of active workers in broker queue.",
+            labels=["queue_name"],
+        )
+        self._metrics.create_gauge(
+            "active_process_count",
+            "The number of active processes in broker queue.",
+            labels=["queue_name"],
+        )
         #   Histograms
-        self._metrics.create_histogram("task_runtime", "Histogram of task runtime measurements.", labels=[
-                                       "name", "hostname", "queue_name"])
+        self._metrics.create_histogram(
+            "task_runtime",
+            "Histogram of task runtime measurements.",
+            labels=["name", "hostname", "queue_name"],
+        )
 
     def _lifespan(self):
         async def lifespan(app: FastAPI):
             asyncio.create_task(self.update_metrics())
             yield
+
         return lifespan
 
     async def update_metrics(self):
@@ -105,8 +151,7 @@ class Roquefort:
                     continue
 
                 if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(
-                        queue_name)
+                    self._workers_metadata[worker_name]["queues"].append(queue_name)
 
         pprint(self._workers_metadata)
 
@@ -121,15 +166,13 @@ class Roquefort:
                         # Use run_in_executor to avoid blocking the event loop
                         await loop.run_in_executor(
                             None,
-                            lambda: recv.capture(
-                                limit=None, timeout=1, wakeup=True)
+                            lambda: recv.capture(limit=None, timeout=1, wakeup=True),
                         )
                     except socket.timeout:
                         # Timeout is expected, just continue
                         continue
                     except (KeyboardInterrupt, SystemExit):
-                        logging.info(
-                            "Shutdown signal received in metrics collection")
+                        logging.info("Shutdown signal received in metrics collection")
                         self._shutdown_event.set()
                         raise
                     except Exception as e:
@@ -139,8 +182,7 @@ class Roquefort:
                         await asyncio.sleep(1)
 
         except (KeyboardInterrupt, SystemExit):
-            logging.info(
-                "Shutdown signal received, stopping metrics collection")
+            logging.info("Shutdown signal received, stopping metrics collection")
             self._shutdown_event.set()
         except Exception as e:
             if not self._shutdown_event.is_set():
@@ -161,8 +203,7 @@ class Roquefort:
             # Start metrics collection
             await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
-            logging.info(
-                "Shutdown signal received, stopping Roquefort gracefully")
+            logging.info("Shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
             logging.exception(f"Fatal error in run: {e}")
@@ -188,7 +229,7 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
+                "queue_name": event.get("queue", "unknown"),
             },
         )
 
@@ -199,8 +240,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_started(self, event):
@@ -210,8 +251,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_succeeded(self, event):
@@ -221,8 +262,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_failed(self, event):
@@ -232,8 +273,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_retried(self, event):
@@ -243,8 +284,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_rejected(self, event):
@@ -254,8 +295,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_task_revoked(self, event):
@@ -265,8 +306,8 @@ class Roquefort:
             {
                 "name": event.get("name", "unknown"),
                 "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown")
-            }
+                "queue_name": event.get("queue", "unknown"),
+            },
         )
 
     def _handle_worker_heartbeat(self, event):
@@ -279,15 +320,25 @@ class Roquefort:
         worker_queues = self._workers_metadata.get(worker_name).get("queues")
 
         try:
-            self._metrics.set_gauge(name="worker_active", value=True, labels={
-                                    "hostname": event["hostname"], "queue_name": format_queue_names(worker_queues)})
+            self._metrics.set_gauge(
+                name="worker_active",
+                value=True,
+                labels={
+                    "hostname": event["hostname"],
+                    "queue_name": format_queue_names(worker_queues),
+                },
+            )
         except Exception as e:
             logging.error(f"error setting worker_active metric: {e}")
 
 
 async def main():
-    roquefort = Roquefort(broker_url="redis://localhost:6379/0", host="0.0.0.0",
-                          port=8001, custom_labels={"who_you_gonna_call": "ghostbusters"})
+    roquefort = Roquefort(
+        broker_url="redis://localhost:6379/0",
+        host="0.0.0.0",
+        port=8001,
+        custom_labels={"who_you_gonna_call": "ghostbusters"},
+    )
     await roquefort.run()
 
 
