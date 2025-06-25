@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from pprint import pprint
+from pprint import pprint, pformat
 import random
 import socket
 from celery import Celery
@@ -125,7 +125,7 @@ class Roquefort:
         self._state = self._app.events.State()
         handlers = {
             # "task-sent": self._handle_task_sent,
-            # "task-received": self._handle_task_received,
+            "task-received": self._handle_task_received,
             # "task-started": self._handle_task_started,
             # "task-succeeded": self._handle_task_succeeded,
             # "task-failed": self._handle_task_failed,
@@ -213,10 +213,11 @@ class Roquefort:
             logging.info("Roquefort stopped")
 
     def _handle_task_generic(self, event, metric_name: str, labels: dict):
+        logging.info(f"event:\n{pformat(event)}")
         self._state.event(event)
         task = self._state.tasks.get(event.get("uuid"))
-        logging.error(f"Task: {task}")
-        logging.warning(f"{metric_name} received: {event}")
+        logging.info(f"task:\n{pformat(task)}")
+
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
@@ -311,7 +312,7 @@ class Roquefort:
         )
 
     def _handle_worker_heartbeat(self, event):
-        logging.warning(f"Worker heartbeat received: {event}")
+        logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
         worker_name = event.get("hostname")
         if worker_name not in self._workers_metadata:
@@ -330,6 +331,9 @@ class Roquefort:
             )
         except Exception as e:
             logging.error(f"error setting worker_active metric: {e}")
+
+        # todo: add metrics handling for active processes.
+        # todo: add metrics handling for processed tasks.
 
 
 async def main():
