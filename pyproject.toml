@@ -22,3 +22,8 @@ roquefort = "src.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+]
