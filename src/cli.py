@@ -190,7 +190,7 @@ def main(
 
         asyncio.run(roquefort.run())
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         click.echo("\n👋 Roquefort stopped gracefully")
         sys.exit(0)
     except Exception as e:
