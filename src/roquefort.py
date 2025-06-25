@@ -172,7 +172,8 @@ class Roquefort:
                         # Timeout is expected, just continue
                         continue
                     except (KeyboardInterrupt, SystemExit):
-                        logging.info("Shutdown signal received in metrics collection")
+                        logging.info(
+                            "Shutdown signal received in metrics collection")
                         self._shutdown_event.set()
                         raise
                     except Exception as e:
@@ -182,7 +183,8 @@ class Roquefort:
                         await asyncio.sleep(1)
 
         except (KeyboardInterrupt, SystemExit):
-            logging.info("Shutdown signal received, stopping metrics collection")
+            logging.info(
+                "Shutdown signal received, stopping metrics collection")
             self._shutdown_event.set()
         except Exception as e:
             if not self._shutdown_event.is_set():
@@ -203,7 +205,8 @@ class Roquefort:
             # Start metrics collection
             await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
-            logging.info("Shutdown signal received, stopping Roquefort gracefully")
+            logging.info(
+                "Shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
             logging.exception(f"Fatal error in run: {e}")
