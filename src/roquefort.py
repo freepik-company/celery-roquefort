@@ -1,9 +1,7 @@
 import asyncio
 import logging
 from pprint import pp, pformat, pprint
-from pprint import pp, pformat, pprint
 import socket
-from celery import Celery, Task
 from celery import Celery, Task
 from fastapi import FastAPI
 
@@ -13,11 +11,7 @@ from .helpers import (
     get_queue_name_from_worker_metadata,
     get_worker_names,
 )
-from .helpers import (
-    format_queue_names,
-    get_queue_name_from_worker_metadata,
-    get_worker_names,
-)
+
 from .metrics.metrics import MetricService
 from .server.server import HttpServer
 
