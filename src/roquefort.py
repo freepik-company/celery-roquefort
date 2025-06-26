@@ -31,7 +31,6 @@ class Roquefort:
         prefix: str = "roquefort_",
         custom_labels: dict = None,
         default_queue_name: str = None,
-        default_queue_name: str = None,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -292,10 +291,6 @@ class Roquefort:
             task=task,
             metric_name="task_sent",
             labels=labels,
-            event=event,
-            task=task,
-            metric_name="task_sent",
-            labels=labels,
         )
 
     def _handle_task_received(self, event):
@@ -342,10 +337,6 @@ class Roquefort:
             task=task,
             metric_name="task_received",
             labels=labels,
-            event=event,
-            task=task,
-            metric_name="task_received",
-            labels=labels,
         )
 
     def _handle_task_started(self, event):
@@ -372,14 +363,6 @@ class Roquefort:
         )
 
         self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_started",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
             event=event,
             task=task,
             metric_name="task_started",
@@ -415,14 +398,6 @@ class Roquefort:
         )
 
         self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_succeeded",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
             event=event,
             task=task,
             metric_name="task_succeeded",
