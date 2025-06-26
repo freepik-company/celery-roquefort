@@ -131,7 +131,7 @@ class Roquefort:
         self._state = self._app.events.State()
         handlers = {
             "task-sent": self._handle_task_sent,
-            # "task-received": self._handle_task_received,
+            "task-received": self._handle_task_received,
             # "task-started": self._handle_task_started,
             # "task-succeeded": self._handle_task_succeeded,
             # "task-failed": self._handle_task_failed,
@@ -236,7 +236,6 @@ class Roquefort:
             logging.error(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
-        self._state.event(event)
         task: Task = self._get_task_from_event(event)
         queue_name = event.get("queue") or self._default_queue_name
 
@@ -254,7 +253,28 @@ class Roquefort:
         )
 
     def _handle_task_received(self, event):
-        self._handle_task_generic(event, "task_received")
+        task = self._get_task_from_event(event)
+        
+        pprint(event)
+        pprint(task.__dict__)
+        
+        queue_name = getattr(task, "queue") or get_queue_name_from_worker_metadata(event.get("hostname"), self._workers_metadata) or self._default_queue_name
+        
+        worker_name, _ = get_worker_names(event.get("hostname"))
+        
+        labels = {
+            "name": event.get("name"),
+            "worker": worker_name,
+            "hostname": event.get("hostname"),
+            "queue_name": queue_name,
+        }
+        
+        self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_received",
+            labels=labels,
+        )
 
     def _handle_task_started(self, event):
         self._handle_task_generic(
