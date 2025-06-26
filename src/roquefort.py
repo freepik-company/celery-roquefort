@@ -60,7 +60,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_succeeded",
             "Sent if the task was executed successfully.",
-            labels=["name", "hostname", "queue_name"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_failed",
@@ -290,7 +290,7 @@ class Roquefort:
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-        
+
         self._handle_task_generic(
             event=event,
             task=task,
@@ -308,6 +308,27 @@ class Roquefort:
 
         pprint(event)
         pprint(task.__dict__)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
+        self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_succeeded",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
+            },
+        )
 
     def _handle_task_failed(self, event):
         self._handle_task_generic(
