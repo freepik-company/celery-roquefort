@@ -30,12 +30,18 @@ def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
     """
     if worker not in metadata:
         logging.warning(f"worker {worker} not found in metadata")
-        return "unknown"
+        return None
     
     worker_metadata = metadata.get(worker, {})
     
     if not "queues" in worker_metadata:
         logging.warning(f"queues not found in worker metadata for {worker}")
-        return "no queues"
+        return None
+    
+    queues = worker_metadata.get("queues", [])
+    
+    if len(queues) != 1:
+        logging.warning(f"multiple queues found for {worker}: {queues}")
+        return None
 
-    return format_queue_names(worker_metadata.get("queues", []))
+    return queues[0]
