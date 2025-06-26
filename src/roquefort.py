@@ -282,9 +282,6 @@ class Roquefort:
     def _handle_task_started(self, event):
         task = self._get_task_from_event(event)
 
-        pprint(event)
-        pprint(task.__dict__)
-
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
 
@@ -307,15 +304,10 @@ class Roquefort:
         )
 
     def _handle_task_succeeded(self, event):
-        self._handle_task_generic(
-            event,
-            "task_succeeded",
-            {
-                "name": event.get("name", "unknown"),
-                "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown"),
-            },
-        )
+        task = self._get_task_from_event(event)
+
+        pprint(event)
+        pprint(task.__dict__)
 
     def _handle_task_failed(self, event):
         self._handle_task_generic(
