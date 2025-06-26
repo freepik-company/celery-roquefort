@@ -7,9 +7,11 @@ from fastapi import FastAPI
 
 from .helpers import (
     format_queue_names,
+    get_exception_name,
     get_queue_name_from_worker_metadata,
     get_worker_names,
 )
+
 from .metrics.metrics import MetricService
 from .server.server import HttpServer
 
@@ -65,7 +67,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_failed",
             "Sent if the task failed.",
-            labels=["name", "hostname", "queue_name", "exception"],
+            labels=["name", "worker", "hostname", "queue_name", "exception"],
         )
         self._metrics.create_counter(
             "task_retried",
@@ -134,7 +136,7 @@ class Roquefort:
             "task-received": self._handle_task_received,
             "task-started": self._handle_task_started,
             "task-succeeded": self._handle_task_succeeded,
-            # "task-failed": self._handle_task_failed,
+            "task-failed": self._handle_task_failed,
             # "task-retried": self._handle_task_retried,
             # "task-rejected": self._handle_task_rejected,
             # "task-revoked": self._handle_task_revoked,
@@ -142,6 +144,8 @@ class Roquefort:
             # "worker-online": self._handle_worker_online,
             # "worker-offline": self._handle_worker_offline,
         }
+
+        self._tracked_events = list(handlers.keys())
 
         self._tracked_events = list(handlers.keys())
 
@@ -168,6 +172,7 @@ class Roquefort:
 
                 while not self._shutdown_event.is_set():
                     try:
+                        logging.debug("updating metrics")
                         logging.debug("updating metrics")
                         # Use run_in_executor to avoid blocking the event loop
                         await loop.run_in_executor(
@@ -196,8 +201,10 @@ class Roquefort:
                 raise
         finally:
             logging.info("metrics collection stopped")
+            logging.info("metrics collection stopped")
 
     async def run(self):
+        logging.info("starting Roquefort")
         logging.info("starting Roquefort")
 
         try:
@@ -210,8 +217,10 @@ class Roquefort:
             await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
             logging.info("shutdown signal received, stopping Roquefort gracefully")
+            logging.info("shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
+            logging.exception(f"fatal error in run: {e}")
             logging.exception(f"fatal error in run: {e}")
             self._shutdown_event.set()
             raise
@@ -230,12 +239,34 @@ class Roquefort:
                 f"event {event_type} not tracked. Will be processed as {metric_name}"
             )
 
+    def _handle_task_generic(
+        self, event: dict, task: Task, metric_name: str, labels: dict = {}
+    ):
+        event_type = event.get("type")
+
+        logging.debug(f"event of type {event_type} received")
+
+        if event_type not in self._tracked_events:
+            logging.warning(
+                f"event {event_type} not tracked. Will be processed as {metric_name}"
+            )
+
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
             logging.error(f"error setting {metric_name} metric: {e}")
+            logging.error(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
+        task: Task = self._get_task_from_event(event)
+        queue_name = event.get("queue") or self._default_queue_name
+
+        labels = {
+            "name": event.get("name"),
+            "hostname": event.get("hostname"),
+            "queue_name": queue_name,
+        }
+
         task: Task = self._get_task_from_event(event)
         queue_name = event.get("queue") or self._default_queue_name
 
@@ -253,6 +284,25 @@ class Roquefort:
         )
 
     def _handle_task_received(self, event):
+        task = self._get_task_from_event(event)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(
+                event.get("hostname"), self._workers_metadata
+            )
+            or self._default_queue_name
+        )
+
+        worker_name, _ = get_worker_names(event.get("hostname"))
+
+        labels = {
+            "name": event.get("name"),
+            "worker": worker_name,
+            "hostname": event.get("hostname"),
+            "queue_name": queue_name,
+        }
+
         task = self._get_task_from_event(event)
 
         queue_name = (
@@ -291,6 +341,17 @@ class Roquefort:
             or self._default_queue_name
         )
 
+        task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
         self._handle_task_generic(
             event=event,
             task=task,
@@ -315,6 +376,17 @@ class Roquefort:
             or self._default_queue_name
         )
 
+        task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
         self._handle_task_generic(
             event=event,
             task=task,
@@ -328,13 +400,30 @@ class Roquefort:
         )
 
     def _handle_task_failed(self, event):
+        task = self._get_task_from_event(event)
+        
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+        
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+        
+        exception = getattr(task, "exception", None) or event.get("exception")
+        exception_name = get_exception_name(exception)
+        
         self._handle_task_generic(
-            event,
-            "task_failed",
-            {
-                "name": event.get("name", "unknown"),
-                "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown"),
+            event=event,
+            task=task,
+            metric_name="task_failed",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
+                "exception": exception_name,
             },
         )
 
@@ -399,6 +488,8 @@ class Roquefort:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
 
+        # todo: add metrics handling for active processes.
+        # todo: add metrics handling for processed tasks.
 
 async def main():
     roquefort = Roquefort(

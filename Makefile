@@ -47,3 +47,16 @@ info: ## Show project information
 	@echo "UV version: $(shell uv --version)"
 	@echo "Dependencies:"
 	@uv tree 
+
+git-prune: ## Prune the git repository
+	@git branch --format '%(refname:short) %(upstream:track)' | \
+		grep -E '\[gone\]|\[desaparecido\]' | \
+		awk '{print $$1}' > .branches_to_delete
+	@vim .branches_to_delete
+	@if [ -s .branches_to_delete ]; then \
+		echo "Deleting selected branches..."; \
+		cat .branches_to_delete | xargs -I {} git branch -D {}; \
+	else \
+		echo "No branches were selected for deletion."; \
+	fi
+	@rm .branches_to_delete
