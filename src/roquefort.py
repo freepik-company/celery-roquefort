@@ -133,7 +133,7 @@ class Roquefort:
             "task-sent": self._handle_task_sent,
             "task-received": self._handle_task_received,
             "task-started": self._handle_task_started,
-            # "task-succeeded": self._handle_task_succeeded,
+            "task-succeeded": self._handle_task_succeeded,
             # "task-failed": self._handle_task_failed,
             # "task-retried": self._handle_task_retried,
             # "task-rejected": self._handle_task_rejected,
