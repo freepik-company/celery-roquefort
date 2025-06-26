@@ -55,7 +55,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_started",
             "Sent just before a worker runs a task.",
-            labels=["name", "hostname", "queue_name"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_succeeded",
@@ -132,7 +132,7 @@ class Roquefort:
         handlers = {
             "task-sent": self._handle_task_sent,
             "task-received": self._handle_task_received,
-            # "task-started": self._handle_task_started,
+            "task-started": self._handle_task_started,
             # "task-succeeded": self._handle_task_succeeded,
             # "task-failed": self._handle_task_failed,
             # "task-retried": self._handle_task_retried,
@@ -280,13 +280,29 @@ class Roquefort:
         )
 
     def _handle_task_started(self, event):
+        task = self._get_task_from_event(event)
+
+        pprint(event)
+        pprint(task.__dict__)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+        
         self._handle_task_generic(
-            event,
-            "task_started",
-            {
-                "name": event.get("name", "unknown"),
-                "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown"),
+            event=event,
+            task=task,
+            metric_name="task_started",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
             },
         )
 
