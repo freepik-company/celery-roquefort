@@ -72,7 +72,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_retried",
             "Sent if the task was retried.",
-            labels=["name","worker", "hostname", "queue_name", "exception"],
+            labels=["name", "worker", "hostname", "queue_name", "exception"],
         )
         self._metrics.create_counter(
             "task_rejected",
