@@ -1,3 +1,4 @@
+import logging
 from celery.utils import nodesplit  # type: ignore
 
 def format_queue_names(queue_names: list[str]) -> str:
@@ -13,7 +14,11 @@ def format_queue_names(queue_names: list[str]) -> str:
 
 
 def get_worker_names(name: str) -> tuple[str, str]:
-    workername, hostname = nodesplit(name)
+    try:
+        workername, hostname = nodesplit(name)
+    except Exception as e:
+        logging.error(f"error getting worker names from {name}: {e}")
+        return "unknown", "unknown"
     return workername, hostname
 
 def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
@@ -23,4 +28,14 @@ def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
         worker (str): The worker name.
         metadata (dict): The worker metadata.
     """
-    return get_worker_names(metadata.get(worker, {}).get("queues", []))
+    if worker not in metadata:
+        logging.warning(f"worker {worker} not found in metadata")
+        return "unknown"
+    
+    worker_metadata = metadata.get(worker, {})
+    
+    if not "queues" in worker_metadata:
+        logging.warning(f"queues not found in worker metadata for {worker}")
+        return "no queues"
+
+    return format_queue_names(worker_metadata.get("queues", []))
