@@ -83,6 +83,13 @@ def parse_custom_labels(ctx, param, value):
     envvar="CR_VERBOSE",
     help="Enable verbose logging. Env: CR_VERBOSE=1",
 )
+@click.option(
+    "--default-queue-name",
+    "-q",
+    default="unknown-queue",
+    envvar="CR_DEFAULT_QUEUE_NAME",
+    help="Default queue name. Env: CR_DEFAULT_QUEUE_NAME",
+)
 @click.version_option(version="0.1.0", prog_name="roquefort")
 def main(
     env_prefix: str,
@@ -92,6 +99,7 @@ def main(
     prefix: str,
     custom_labels: Dict[str, Any],
     verbose: bool,
+    default_queue_name: str = "unknown-queue",
 ):
     """
     Celery Roquefort - Prometheus metrics collector for Celery tasks and workers.
@@ -149,7 +157,7 @@ def main(
     if verbose:
         import logging
 
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG)
         click.echo(f"Environment prefix: {env_prefix}")
         click.echo(f"Starting Roquefort with broker: {broker_url}")
         click.echo(f"Server will run on {host}:{port}")
@@ -170,6 +178,8 @@ def main(
             env_vars_used.append(f"{env_prefix}CUSTOM_LABELS")
         if os.getenv(f"{env_prefix}VERBOSE"):
             env_vars_used.append(f"{env_prefix}VERBOSE")
+        if os.getenv(f"{env_prefix}DEFAULT_QUEUE_NAME"):
+            env_vars_used.append(f"{env_prefix}DEFAULT_QUEUE_NAME")
 
         if env_vars_used:
             click.echo(f"Using environment variables: {', '.join(env_vars_used)}")
@@ -181,6 +191,7 @@ def main(
             port=port,
             prefix=prefix,
             custom_labels=custom_labels,
+            default_queue_name=default_queue_name,
         )
 
         click.echo("🧀 Starting Roquefort metrics collector...")
@@ -190,7 +201,7 @@ def main(
 
         asyncio.run(roquefort.run())
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         click.echo("\n👋 Roquefort stopped gracefully")
         sys.exit(0)
     except Exception as e:
