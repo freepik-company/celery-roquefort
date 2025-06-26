@@ -306,9 +306,6 @@ class Roquefort:
     def _handle_task_succeeded(self, event):
         task = self._get_task_from_event(event)
 
-        pprint(event)
-        pprint(task.__dict__)
-
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
 
