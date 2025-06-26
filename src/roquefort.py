@@ -1,10 +1,17 @@
 import asyncio
 import logging
 from pprint import pp, pformat, pprint
+from pprint import pp, pformat, pprint
 import socket
+from celery import Celery, Task
 from celery import Celery, Task
 from fastapi import FastAPI
 
+from .helpers import (
+    format_queue_names,
+    get_queue_name_from_worker_metadata,
+    get_worker_names,
+)
 from .helpers import (
     format_queue_names,
     get_queue_name_from_worker_metadata,
@@ -24,6 +31,7 @@ class Roquefort:
         prefix: str = "roquefort_",
         custom_labels: dict = None,
         default_queue_name: str = None,
+        default_queue_name: str = None,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -39,6 +47,8 @@ class Roquefort:
         self._workers_metadata = {}
         self._tracked_events = []
         self._default_queue_name = default_queue_name
+        self._tracked_events = []
+        self._default_queue_name = default_queue_name
 
         # Create metrics
         #   Counters
@@ -51,15 +61,18 @@ class Roquefort:
             "task_received",
             "Received when a task message is received.",
             labels=["name", "worker", "hostname", "queue_name"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_started",
             "Sent just before a worker runs a task.",
             labels=["name", "worker", "hostname", "queue_name"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_succeeded",
             "Sent if the task was executed successfully.",
+            labels=["name", "worker", "hostname", "queue_name"],
             labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
@@ -145,6 +158,8 @@ class Roquefort:
 
         self._tracked_events = list(handlers.keys())
 
+        self._tracked_events = list(handlers.keys())
+
         # Load queue info
         queues = self._app.control.inspect().active_queues() or {}
 
@@ -168,6 +183,7 @@ class Roquefort:
 
                 while not self._shutdown_event.is_set():
                     try:
+                        logging.debug("updating metrics")
                         logging.debug("updating metrics")
                         # Use run_in_executor to avoid blocking the event loop
                         await loop.run_in_executor(
@@ -196,8 +212,10 @@ class Roquefort:
                 raise
         finally:
             logging.info("metrics collection stopped")
+            logging.info("metrics collection stopped")
 
     async def run(self):
+        logging.info("starting Roquefort")
         logging.info("starting Roquefort")
 
         try:
@@ -210,8 +228,10 @@ class Roquefort:
             await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
             logging.info("shutdown signal received, stopping Roquefort gracefully")
+            logging.info("shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
+            logging.exception(f"fatal error in run: {e}")
             logging.exception(f"fatal error in run: {e}")
             self._shutdown_event.set()
             raise
@@ -230,9 +250,22 @@ class Roquefort:
                 f"event {event_type} not tracked. Will be processed as {metric_name}"
             )
 
+    def _handle_task_generic(
+        self, event: dict, task: Task, metric_name: str, labels: dict = {}
+    ):
+        event_type = event.get("type")
+
+        logging.debug(f"event of type {event_type} received")
+
+        if event_type not in self._tracked_events:
+            logging.warning(
+                f"event {event_type} not tracked. Will be processed as {metric_name}"
+            )
+
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
+            logging.error(f"error setting {metric_name} metric: {e}")
             logging.error(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
@@ -245,7 +278,20 @@ class Roquefort:
             "queue_name": queue_name,
         }
 
+        task: Task = self._get_task_from_event(event)
+        queue_name = event.get("queue") or self._default_queue_name
+
+        labels = {
+            "name": event.get("name"),
+            "hostname": event.get("hostname"),
+            "queue_name": queue_name,
+        }
+
         self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_sent",
+            labels=labels,
             event=event,
             task=task,
             metric_name="task_sent",
@@ -272,7 +318,30 @@ class Roquefort:
             "queue_name": queue_name,
         }
 
+        task = self._get_task_from_event(event)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(
+                event.get("hostname"), self._workers_metadata
+            )
+            or self._default_queue_name
+        )
+
+        worker_name, _ = get_worker_names(event.get("hostname"))
+
+        labels = {
+            "name": event.get("name"),
+            "worker": worker_name,
+            "hostname": event.get("hostname"),
+            "queue_name": queue_name,
+        }
+
         self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_received",
+            labels=labels,
             event=event,
             task=task,
             metric_name="task_received",
@@ -291,7 +360,26 @@ class Roquefort:
             or self._default_queue_name
         )
 
+        task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
         self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_started",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
             event=event,
             task=task,
             metric_name="task_started",
@@ -315,7 +403,26 @@ class Roquefort:
             or self._default_queue_name
         )
 
+        task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
         self._handle_task_generic(
+            event=event,
+            task=task,
+            metric_name="task_succeeded",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
             event=event,
             task=task,
             metric_name="task_succeeded",
@@ -373,6 +480,7 @@ class Roquefort:
 
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
+        logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
         worker_name = event.get("hostname")
         if worker_name not in self._workers_metadata:
@@ -391,6 +499,13 @@ class Roquefort:
             )
         except Exception as e:
             logging.error(f"error setting worker_active metric: {e}")
+
+        # todo: add metrics handling for active processes.
+        # todo: add metrics handling for processed tasks.
+
+    def _get_task_from_event(self, event) -> Task:
+        self._state.event(event)
+        return self._state.tasks.get(event.get("uuid"))
 
         # todo: add metrics handling for active processes.
         # todo: add metrics handling for processed tasks.
