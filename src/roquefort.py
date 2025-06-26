@@ -491,9 +491,6 @@ class Roquefort:
         # todo: add metrics handling for active processes.
         # todo: add metrics handling for processed tasks.
 
-# Removed duplicate definition of _get_task_from_event
-
-
 async def main():
     roquefort = Roquefort(
         broker_url="redis://localhost:6379/0",
