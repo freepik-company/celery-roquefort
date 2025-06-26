@@ -1,4 +1,5 @@
 import logging
+import re
 from celery.utils import nodesplit  # type: ignore
 
 def format_queue_names(queue_names: list[str]) -> str:
@@ -45,3 +46,11 @@ def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
         return None
 
     return queues[0]
+
+exception_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(")
+
+def get_exception_name(message: str) -> str:
+    match = exception_re.match(message)
+    if match:
+        return match.group(1)
+    return "unknown"
