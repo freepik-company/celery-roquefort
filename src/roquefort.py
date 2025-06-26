@@ -497,9 +497,7 @@ class Roquefort:
         # todo: add metrics handling for active processes.
         # todo: add metrics handling for processed tasks.
 
-    def _get_task_from_event(self, event) -> Task:
-        self._state.event(event)
-        return self._state.tasks.get(event.get("uuid"))
+# Removed duplicate definition of _get_task_from_event
 
 
 async def main():
