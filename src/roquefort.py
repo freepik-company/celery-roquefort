@@ -254,21 +254,27 @@ class Roquefort:
 
     def _handle_task_received(self, event):
         task = self._get_task_from_event(event)
-        
+
         pprint(event)
         pprint(task.__dict__)
-        
-        queue_name = getattr(task, "queue") or get_queue_name_from_worker_metadata(event.get("hostname"), self._workers_metadata) or self._default_queue_name
-        
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(
+                event.get("hostname"), self._workers_metadata
+            )
+            or self._default_queue_name
+        )
+
         worker_name, _ = get_worker_names(event.get("hostname"))
-        
+
         labels = {
             "name": event.get("name"),
             "worker": worker_name,
             "hostname": event.get("hostname"),
             "queue_name": queue_name,
         }
-        
+
         self._handle_task_generic(
             event=event,
             task=task,
