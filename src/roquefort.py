@@ -47,8 +47,6 @@ class Roquefort:
         self._workers_metadata = {}
         self._tracked_events = []
         self._default_queue_name = default_queue_name
-        self._tracked_events = []
-        self._default_queue_name = default_queue_name
 
         # Create metrics
         #   Counters
