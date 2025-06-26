@@ -470,7 +470,6 @@ class Roquefort:
 
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
-        logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
         worker_name = event.get("hostname")
         if worker_name not in self._workers_metadata:
