@@ -82,7 +82,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_revoked",
             "Sent if the task was revoked.",
-            labels=["name", "hostname", "queue_name", "exception"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         #   Gauges
         self._metrics.create_gauge(
