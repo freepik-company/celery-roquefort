@@ -77,7 +77,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_rejected",
             "Sent if the task was rejected.",
-            labels=["name", "hostname", "queue_name", "exception"],
+            labels=["name", "worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_revoked",
