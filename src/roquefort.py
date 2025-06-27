@@ -139,7 +139,7 @@ class Roquefort:
             "task-failed": self._handle_task_failed,
             "task-retried": self._handle_task_retried,
             "task-rejected": self._handle_task_rejected,
-            # "task-revoked": self._handle_task_revoked,
+            "task-revoked": self._handle_task_revoked,
             "worker-heartbeat": self._handle_worker_heartbeat,
             # "worker-online": self._handle_worker_online,
             # "worker-offline": self._handle_worker_offline,
@@ -173,7 +173,6 @@ class Roquefort:
                 while not self._shutdown_event.is_set():
                     try:
                         logging.debug("updating metrics")
-                        logging.debug("updating metrics")
                         # Use run_in_executor to avoid blocking the event loop
                         await loop.run_in_executor(
                             None,
@@ -190,7 +189,8 @@ class Roquefort:
                         if self._shutdown_event.is_set():
                             break
                         logging.exception(f"Error in update_metrics: {e}")
-                        await asyncio.sleep(1)
+                    
+                    await asyncio.sleep(1)
 
         except (KeyboardInterrupt, SystemExit):
             logging.info("Shutdown signal received, stopping metrics collection")
