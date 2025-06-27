@@ -30,6 +30,7 @@ jobs:
       - name: Create release
         run: |
           cz bump --changelog --yes
+          git push
           git push --tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
