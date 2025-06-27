@@ -189,7 +189,7 @@ class Roquefort:
                         if self._shutdown_event.is_set():
                             break
                         logging.exception(f"Error in update_metrics: {e}")
-                    
+
                     await asyncio.sleep(1)
 
         except (KeyboardInterrupt, SystemExit):
@@ -457,16 +457,16 @@ class Roquefort:
 
     def _handle_task_rejected(self, event):
         task = self._get_task_from_event(event)
-        
+
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
-        
+
         queue_name = (
             getattr(task, "queue")
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-        
+
         self._handle_task_generic(
             event=event,
             task=task,
@@ -517,9 +517,6 @@ class Roquefort:
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
-
-        # todo: add metrics handling for active processes.
-        # todo: add metrics handling for processed tasks.
 
 async def main():
     roquefort = Roquefort(
