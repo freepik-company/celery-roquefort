@@ -72,7 +72,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_retried",
             "Sent if the task was retried.",
-            labels=["name", "hostname", "queue_name", "exception"],
+            labels=["name", "worker", "hostname", "queue_name", "exception"],
         )
         self._metrics.create_counter(
             "task_rejected",
@@ -137,7 +137,7 @@ class Roquefort:
             "task-started": self._handle_task_started,
             "task-succeeded": self._handle_task_succeeded,
             "task-failed": self._handle_task_failed,
-            # "task-retried": self._handle_task_retried,
+            "task-retried": self._handle_task_retried,
             # "task-rejected": self._handle_task_rejected,
             # "task-revoked": self._handle_task_revoked,
             "worker-heartbeat": self._handle_worker_heartbeat,
@@ -401,19 +401,19 @@ class Roquefort:
 
     def _handle_task_failed(self, event):
         task = self._get_task_from_event(event)
-        
+
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
-        
+
         queue_name = (
             getattr(task, "queue")
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-        
+
         exception = getattr(task, "exception", None) or event.get("exception")
         exception_name = get_exception_name(exception)
-        
+
         self._handle_task_generic(
             event=event,
             task=task,
@@ -428,13 +428,30 @@ class Roquefort:
         )
 
     def _handle_task_retried(self, event):
+        task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+
+        queue_name = (
+            getattr(task, "queue")
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
+        exception = getattr(task, "exception", None) or event.get("exception")
+        exception_name = get_exception_name(exception)
+
         self._handle_task_generic(
-            event,
-            "task_retried",
-            {
-                "name": event.get("name", "unknown"),
-                "hostname": event.get("hostname", "unknown"),
-                "queue_name": event.get("queue", "unknown"),
+            event=event,
+            task=task,
+            metric_name="task_retried",
+            labels={
+                "name": getattr(task, "name"),
+                "worker": worker_name,
+                "hostname": hostname,
+                "queue_name": queue_name,
+                "exception": exception_name,
             },
         )
 
