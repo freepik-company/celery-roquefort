@@ -14,3 +14,4 @@ wheels/
 !.gitignore
 !.python-version
 !.dockerignore
+!.github
