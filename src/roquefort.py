@@ -518,6 +518,7 @@ class Roquefort:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
 
+
 async def main():
     roquefort = Roquefort(
         broker_url="redis://localhost:6379/0",
