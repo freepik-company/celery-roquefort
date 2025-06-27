@@ -138,7 +138,7 @@ class Roquefort:
             "task-succeeded": self._handle_task_succeeded,
             "task-failed": self._handle_task_failed,
             "task-retried": self._handle_task_retried,
-            # "task-rejected": self._handle_task_rejected,
+            "task-rejected": self._handle_task_rejected,
             # "task-revoked": self._handle_task_revoked,
             "worker-heartbeat": self._handle_worker_heartbeat,
             # "worker-online": self._handle_worker_online,
