@@ -24,12 +24,12 @@ jobs:
 
       - name: Configure git
         run: |
-          git config --global user.name "jarvis-fc"
-          git config --global user.email "jarvis-fc@freepik.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Create release
         run: |
           cz bump --changelog --yes
-          git push --follow-tags
+          git push --tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
