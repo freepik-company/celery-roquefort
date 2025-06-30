@@ -88,7 +88,7 @@ class Roquefort:
         self._metrics.create_gauge(
             "worker_active",
             "Number of active workers. It indicates that the worker has recently sent a heartbeat.",
-            labels=["hostname", "queue_name"],
+            labels=["hostname", "worker", "queue_name"],
         )
         self._metrics.create_gauge(
             "worker_tasks_active",
@@ -132,17 +132,17 @@ class Roquefort:
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
         handlers = {
-            "task-sent": self._handle_task_sent,
-            "task-received": self._handle_task_received,
-            "task-started": self._handle_task_started,
-            "task-succeeded": self._handle_task_succeeded,
-            "task-failed": self._handle_task_failed,
-            "task-retried": self._handle_task_retried,
-            "task-rejected": self._handle_task_rejected,
-            "task-revoked": self._handle_task_revoked,
-            "worker-heartbeat": self._handle_worker_heartbeat,
-            # "worker-online": self._handle_worker_online,
-            # "worker-offline": self._handle_worker_offline,
+            # "task-sent": self._handle_task_sent,
+            # "task-received": self._handle_task_received,
+            # "task-started": self._handle_task_started,
+            # "task-succeeded": self._handle_task_succeeded,
+            # "task-failed": self._handle_task_failed,
+            # "task-retried": self._handle_task_retried,
+            # "task-rejected": self._handle_task_rejected,
+            # "task-revoked": self._handle_task_revoked,
+            # "worker-heartbeat": self._handle_worker_heartbeat,
+            "worker-online": self._handle_worker_status,
+            "worker-offline": self._handle_worker_status,
         }
 
         self._tracked_events = list(handlers.keys())
@@ -150,7 +150,7 @@ class Roquefort:
         self._tracked_events = list(handlers.keys())
 
         # Load queue info
-        queues = self._app.control.inspect().active_queues() or {}
+        queues = self._get_active_queues()
 
         for worker_name, queue_info_list in queues.items():
             if worker_name not in self._workers_metadata:
@@ -524,23 +524,60 @@ class Roquefort:
         except Exception as e:
             logging.error(f"error setting worker_active metric: {e}")
 
+    def _handle_worker_status(self, event):
+        event_type = event.get("type")
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+        logging.debug(f"worker {worker_name} status event received: {event_type}")
+
+        value = 0
+        metadata = {}
+
+        if event_type == "worker-online":
+            value = 1
+            metadata = self._get_worker_metadata_by_hostname(hostname)
+            pprint(metadata)
+
+        queue_name = (
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
+        labels = {
+            "hostname": hostname,
+            "worker": worker_name,
+            "queue_name": queue_name,
+        }
+
+        try:
+            self._metrics.set_gauge(
+                name="worker_active",
+                value=value,
+                labels=labels,
+            )
+        except Exception as e:
+            logging.error(f"error setting worker_active metric: {e}")
+
         # todo: add metrics handling for active processes.
         # todo: add metrics handling for processed tasks.
+
+    def _get_worker_metadata_by_hostname(self, hostname: str) -> dict:
+        metadata = self._workers_metadata.get(hostname)
+        if not metadata:
+            queues = self._get_active_queues()
+            metadata = queues.get(hostname)
+            if metadata:
+                self._workers_metadata[hostname] = metadata
+        return metadata
+
+    def _get_active_queues(self) -> dict:
+        """Get active queues from Celery app control interface.
+
+        Returns:
+            dict: Dictionary of active queues by worker name, or empty dict if none found.
+        """
+        return self._app.control.inspect().active_queues() or {}
 
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
-
-
-async def main():
-    roquefort = Roquefort(
-        broker_url="redis://localhost:6379/0",
-        host="0.0.0.0",
-        port=8001,
-        custom_labels={"who_you_gonna_call": "ghostbusters"},
-    )
-    await roquefort.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
