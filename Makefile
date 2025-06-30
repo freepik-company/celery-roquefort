@@ -1,3 +1,6 @@
+IMAGE_REGISTRY = ghcr.io/freepik-company
+IMAGE_NAME = $(IMAGE_REGISTRY)/celery-roquefort
+
 .PHONY: help setup install dev run docker-build docker-run clean
 
 # Default target
@@ -60,3 +63,11 @@ git-prune: ## Prune the git repository
 		echo "No branches were selected for deletion."; \
 	fi
 	@rm .branches_to_delete
+
+docker-build: docker-build-base docker-build-app
+
+docker-build-base:
+	docker build -t $(IMAGE_NAME):base -f Dockerfile .
+
+docker-build-app:
+	docker build -t $(IMAGE_NAME):dev -f Dockerfile .
