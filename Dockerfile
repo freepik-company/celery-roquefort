@@ -29,6 +29,9 @@ RUN adduser \
     --uid "${UID}" \
     appuser
 
+# Create cache directory for appuser and set permissions
+RUN mkdir -p /home/appuser/.cache && chown -R appuser:appuser /home/appuser/.cache
+
 # Download dependencies as a separate step to take advantage of Docker's caching.
 # Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
 # Leverage a bind mount to requirements.txt to avoid having to copy them into
@@ -39,11 +42,14 @@ RUN pip install uv
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=README.md,target=README.md \
     uv sync
 
-# Create cache directory for appuser and set permissions
-RUN mkdir -p /home/appuser/.cache && chown -R appuser:appuser /home/appuser/.cache
-
+    
+CMD ["uv", "run", "python", "--version"]
+    
+FROM base AS app
+    
 # Switch to the non-privileged user to run the application.
 USER appuser
 
