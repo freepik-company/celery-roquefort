@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import socket
+import time
 from celery import Celery, Task
 from fastapi import FastAPI
 
@@ -11,7 +12,6 @@ from .helpers import (
     get_queue_name_from_worker_metadata,
     get_worker_names,
 )
-
 from .metrics.metrics import MetricService
 from .server.server import HttpServer
 
@@ -25,6 +25,7 @@ class Roquefort:
         prefix: str = "roquefort_",
         custom_labels: dict = None,
         default_queue_name: str = None,
+        worker_ttl: int = 60,
     ) -> None:
         self._broker_url = broker_url
         self._metrics = MetricService(metric_prefix=prefix, custom_labels=custom_labels)
@@ -35,13 +36,12 @@ class Roquefort:
         self._server_started = False
         self._workers_metadata = {}
         self._default_queue_name = default_queue_name
-
+        self._worker_ttl = worker_ttl
         self._tracked_events = [
             "task-sent", "task-received", "task-started", "task-succeeded", "task-failed",
             "task-retried", "task-rejected", "task-revoked",
             "worker-heartbeat", "worker-online", "worker-offline"
         ]
-
         self._create_metrics()
 
     def _lifespan(self):
@@ -102,6 +102,8 @@ class Roquefort:
             "worker-offline": self._handle_worker_status,
         }
 
+        asyncio.create_task(self._expire_stale_workers())
+
         try:
             with self._app.connection() as connection:
                 recv = self._app.events.Receiver(connection, handlers=handlers)
@@ -137,20 +139,22 @@ class Roquefort:
         queues = self._get_active_queues()
         for worker_name, queue_info_list in queues.items():
             if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": []}
+                self._workers_metadata[worker_name] = {"queues": [], "last_seen": time.time()}
             for queue in queue_info_list:
                 name = queue.get("name")
                 if name and name not in self._workers_metadata[worker_name]["queues"]:
                     self._workers_metadata[worker_name]["queues"].append(name)
+            self._workers_metadata[worker_name]["last_seen"] = time.time()
 
     def _handle_worker_heartbeat(self, event):
         hostname = event.get("hostname")
-        if hostname not in self._workers_metadata:
-            self._update_worker_metadata()
-            
         worker_name, _ = get_worker_names(hostname)
+        self._update_worker_metadata()
 
-        queues = self._workers_metadata.get(hostname, {}).get("queues", ["unknown"])
+        if worker_name in self._workers_metadata:
+            self._workers_metadata[worker_name]["last_seen"] = time.time()
+
+        queues = self._workers_metadata.get(worker_name, {}).get("queues", ["unknown"])
 
         self._metrics.set_gauge(
             "worker_active",
@@ -165,6 +169,7 @@ class Roquefort:
 
         if event_type == "worker-online":
             self._update_worker_metadata()
+            self._workers_metadata[worker_name]["last_seen"] = time.time()
             value = 1
         else:
             value = 0
@@ -178,8 +183,6 @@ class Roquefort:
         )
 
     def _handle_task_generic(self, event, task, metric_name, labels):
-        if event.get("type") not in self._tracked_events:
-            logging.warning(f"Untracked event type: {event.get('type')}")
         self._metrics.increment_counter(metric_name, labels)
 
     def _handle_task_sent(self, event):
@@ -226,6 +229,32 @@ class Roquefort:
             exception = getattr(task, "exception", None) or event.get("exception")
             labels["exception"] = get_exception_name(exception)
         self._handle_task_generic(event, task, metric_name, labels)
+
+    async def _expire_stale_workers(self, check_interval: int = 10):
+        while not self._shutdown_event.is_set():
+            now = time.time()
+            expired = []
+            for worker_name, metadata in list(self._workers_metadata.items()):
+                last_seen = metadata.get("last_seen", 0)
+                if now - last_seen > self._worker_ttl:
+                    logging.info(f"Expiring metrics for inactive worker: {worker_name}")
+                    self._purge_worker_metrics(worker_name)
+                    expired.append(worker_name)
+            for w in expired:
+                self._workers_metadata.pop(w, None)
+            await asyncio.sleep(check_interval)
+
+    def _purge_worker_metrics(self, worker_name: str):
+        try:
+            for metric in self._metrics.get_all_metrics():
+                for sample in metric.collect()[0].samples:
+                    if sample.labels.get("worker") == worker_name:
+                        try:
+                            metric.remove(*(sample.labels[k] for k in metric._labelnames))
+                        except Exception:
+                            pass  # Metric type may not support remove
+        except Exception as e:
+            logging.error(f"Error purging metrics for {worker_name}: {e}")
 
     def _get_active_queues(self):
         return self._app.control.inspect().active_queues() or {}
