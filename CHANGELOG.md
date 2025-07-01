@@ -1,3 +1,9 @@
+## 0.2.0 (2025-07-01)
+
+### Feat
+
+- enable metrics for worker status (#12)
+
 ## 0.1.0 (2025-06-27)
 
 ### Feat
