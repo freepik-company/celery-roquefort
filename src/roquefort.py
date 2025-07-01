@@ -2,6 +2,7 @@ import asyncio
 import logging
 from pprint import pp, pformat, pprint
 import socket
+import time
 from celery import Celery, Task
 from fastapi import FastAPI
 
@@ -150,20 +151,7 @@ class Roquefort:
         self._tracked_events = list(handlers.keys())
 
         # Load queue info
-        queues = self._app.control.inspect().active_queues() or {}
-
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": []}
-
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
-
-                if not queue_name:
-                    continue
-
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
+        self._load_worker_metadata()
 
         try:
             with self._app.connection() as connection:
@@ -534,8 +522,11 @@ class Roquefort:
         event_type = event.get("type")
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
-
+        
         logging.debug(f"received event {event_type} for worker {hostname}")
+        
+        if event_type == "worker-online" and hostname not in self._workers_metadata:
+            self._load_worker_metadata(hostname)
 
         value = 0
 
@@ -557,11 +548,32 @@ class Roquefort:
             },
         )
 
-        pprint(event)
 
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
+    
+    def _load_worker_metadata(self, hostname: str = None) -> None:
+        
+        if hostname and hostname in self._workers_metadata:
+            return
+        
+        destination = [hostname] if hostname else None 
+
+        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+
+        for worker_name, queue_info_list in queues.items():
+            if worker_name not in self._workers_metadata:
+                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+
+            for queue_info in queue_info_list:
+                queue_name = queue_info.get("name")
+
+                if not queue_name:
+                    continue
+
+                if queue_name not in self._workers_metadata[worker_name]["queues"]:
+                    self._workers_metadata[worker_name]["queues"].append(queue_name)
 
 
 async def main():
