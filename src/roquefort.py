@@ -148,8 +148,6 @@ class Roquefort:
 
         self._tracked_events = list(handlers.keys())
 
-        self._tracked_events = list(handlers.keys())
-
         # Load queue info
         self._load_worker_metadata()
 
