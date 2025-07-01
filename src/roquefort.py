@@ -150,8 +150,6 @@ class Roquefort:
 
         self._tracked_events = list(handlers.keys())
 
-        self._tracked_events = list(handlers.keys())
-
         # Load queue info
         self._load_worker_metadata()
 
@@ -560,6 +558,28 @@ class Roquefort:
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
+    
+    def _load_worker_metadata(self, hostname: str = None) -> None:
+        
+        if hostname and hostname in self._workers_metadata:
+            return
+        
+        destination = [hostname] if hostname else None 
+
+        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+
+        for worker_name, queue_info_list in queues.items():
+            if worker_name not in self._workers_metadata:
+                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+
+            for queue_info in queue_info_list:
+                queue_name = queue_info.get("name")
+
+                if not queue_name:
+                    continue
+
+                if queue_name not in self._workers_metadata[worker_name]["queues"]:
+                    self._workers_metadata[worker_name]["queues"].append(queue_name)
 
     def _load_worker_metadata(self, hostname: str = None) -> None:
 
