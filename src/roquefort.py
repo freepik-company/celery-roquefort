@@ -2,6 +2,7 @@ import asyncio
 import logging
 from pprint import pp, pformat, pprint
 import socket
+import time
 from celery import Celery, Task
 from fastapi import FastAPI
 
@@ -88,7 +89,7 @@ class Roquefort:
         self._metrics.create_gauge(
             "worker_active",
             "Number of active workers. It indicates that the worker has recently sent a heartbeat.",
-            labels=["hostname", "queue_name"],
+            labels=["hostname", "worker", "queue_name"],
         )
         self._metrics.create_gauge(
             "worker_tasks_active",
@@ -132,38 +133,23 @@ class Roquefort:
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
         handlers = {
-            "task-sent": self._handle_task_sent,
-            "task-received": self._handle_task_received,
-            "task-started": self._handle_task_started,
-            "task-succeeded": self._handle_task_succeeded,
-            "task-failed": self._handle_task_failed,
-            "task-retried": self._handle_task_retried,
-            "task-rejected": self._handle_task_rejected,
-            "task-revoked": self._handle_task_revoked,
-            "worker-heartbeat": self._handle_worker_heartbeat,
-            # "worker-online": self._handle_worker_online,
-            # "worker-offline": self._handle_worker_offline,
+            # "task-sent": self._handle_task_sent,
+            # "task-received": self._handle_task_received,
+            # "task-started": self._handle_task_started,
+            # "task-succeeded": self._handle_task_succeeded,
+            # "task-failed": self._handle_task_failed,
+            # "task-retried": self._handle_task_retried,
+            # "task-rejected": self._handle_task_rejected,
+            # "task-revoked": self._handle_task_revoked,
+            # "worker-heartbeat": self._handle_worker_heartbeat,
+            "worker-online": self._handle_worker_status,
+            "worker-offline": self._handle_worker_status,
         }
 
         self._tracked_events = list(handlers.keys())
 
-        self._tracked_events = list(handlers.keys())
-
         # Load queue info
-        queues = self._app.control.inspect().active_queues() or {}
-
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": []}
-
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
-
-                if not queue_name:
-                    continue
-
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
+        self._load_worker_metadata()
 
         try:
             with self._app.connection() as connection:
@@ -506,19 +492,22 @@ class Roquefort:
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
-        worker_name = event.get("hostname")
-        if worker_name not in self._workers_metadata:
-            self._workers_metadata[worker_name] = {"queues": ["unknown"]}
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
 
-        worker_queues = self._workers_metadata.get(worker_name).get("queues")
+        queue_name = (
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
 
         try:
             self._metrics.set_gauge(
                 name="worker_active",
-                value=True,
+                value=1,
                 labels={
-                    "hostname": event["hostname"],
-                    "queue_name": format_queue_names(worker_queues),
+                    "hostname": hostname,
+                    "worker": worker_name,
+                    "queue_name": queue_name,
                 },
             )
         except Exception as e:
@@ -527,9 +516,62 @@ class Roquefort:
         # todo: add metrics handling for active processes.
         # todo: add metrics handling for processed tasks.
 
+    def _handle_worker_status(self, event):
+        event_type = event.get("type")
+        hostname = event.get("hostname")
+        worker_name, _ = get_worker_names(hostname)
+        
+        logging.debug(f"received event {event_type} for worker {hostname}")
+        
+        if event_type == "worker-online" and hostname not in self._workers_metadata:
+            self._load_worker_metadata(hostname)
+
+        value = 0
+
+        queue_name = (
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+
+        if event_type == "worker-online":
+            value = 1
+
+        self._metrics.set_gauge(
+            name="worker_active",
+            value=value,
+            labels={
+                "hostname": hostname,
+                "worker": worker_name,
+                "queue_name": queue_name,
+            },
+        )
+
+
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
+    
+    def _load_worker_metadata(self, hostname: str = None) -> None:
+        
+        if hostname and hostname in self._workers_metadata:
+            return
+        
+        destination = [hostname] if hostname else None 
+
+        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+
+        for worker_name, queue_info_list in queues.items():
+            if worker_name not in self._workers_metadata:
+                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+
+            for queue_info in queue_info_list:
+                queue_name = queue_info.get("name")
+
+                if not queue_name:
+                    continue
+
+                if queue_name not in self._workers_metadata[worker_name]["queues"]:
+                    self._workers_metadata[worker_name]["queues"].append(queue_name)
 
 
 async def main():

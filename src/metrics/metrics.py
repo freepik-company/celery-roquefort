@@ -1,3 +1,4 @@
+import logging
 from typing import Union
 import prometheus_client as prom
 
@@ -34,6 +35,9 @@ class MetricService:
 
     def set_gauge(self, name: str, value: Union[int, float, bool], labels: dict = None):
         labels = labels or {}
+        if name not in self.gauges:
+            logging.warning(f"gauge {name} not found. skipping")
+            return
         self.gauges[name].labels(**labels, **self._custom_labels).set(value)
 
     def create_counter(self, name: str, description: str, labels: list[str] = []):
