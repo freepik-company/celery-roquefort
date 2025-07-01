@@ -139,22 +139,26 @@ class Roquefort:
         queues = self._get_active_queues()
         for worker_name, queue_info_list in queues.items():
             if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_seen": time.time()}
+                self._workers_metadata[worker_name] = {"queues": [], "last_seen": 0}
+
+            existing_queues = self._workers_metadata[worker_name]["queues"]
             for queue in queue_info_list:
                 name = queue.get("name")
-                if name and name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(name)
+                if name and name not in existing_queues:
+                    existing_queues.append(name)
+
             self._workers_metadata[worker_name]["last_seen"] = time.time()
 
     def _handle_worker_heartbeat(self, event):
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
+
         self._update_worker_metadata()
 
-        if worker_name in self._workers_metadata:
-            self._workers_metadata[worker_name]["last_seen"] = time.time()
+        # Si sigue sin haber colas, fallback
+        queues = self._workers_metadata.get(worker_name, {}).get("queues") or ["unknown"]
 
-        queues = self._workers_metadata.get(worker_name, {}).get("queues", ["unknown"])
+        self._workers_metadata[worker_name]["last_seen"] = time.time()
 
         self._metrics.set_gauge(
             "worker_active",
@@ -167,12 +171,9 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
         event_type = event.get("type")
 
-        if event_type == "worker-online":
-            self._update_worker_metadata()
-            self._workers_metadata[worker_name]["last_seen"] = time.time()
-            value = 1
-        else:
-            value = 0
+        self._update_worker_metadata()
+        self._workers_metadata[worker_name]["last_seen"] = time.time()
+        value = 1 if event_type == "worker-online" else 0
 
         queue_name = get_queue_name_from_worker_metadata(hostname, self._workers_metadata) or self._default_queue_name
 
@@ -252,7 +253,7 @@ class Roquefort:
                         try:
                             metric.remove(*(sample.labels[k] for k in metric._labelnames))
                         except Exception:
-                            pass  # Metric type may not support remove
+                            pass
         except Exception as e:
             logging.error(f"Error purging metrics for {worker_name}: {e}")
 
