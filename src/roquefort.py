@@ -27,6 +27,7 @@ class Roquefort:
         prefix: str = "roquefort_",
         custom_labels: dict = None,
         default_queue_name: str = None,
+        worker_heartbeat_timeout: int = 60,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -42,6 +43,7 @@ class Roquefort:
         self._workers_metadata = {}
         self._tracked_events = []
         self._default_queue_name = default_queue_name
+        self._worker_heartbeat_timeout = worker_heartbeat_timeout
 
         # Create metrics
         #   Counters
@@ -133,15 +135,15 @@ class Roquefort:
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
         handlers = {
-            # "task-sent": self._handle_task_sent,
-            # "task-received": self._handle_task_received,
-            # "task-started": self._handle_task_started,
-            # "task-succeeded": self._handle_task_succeeded,
-            # "task-failed": self._handle_task_failed,
-            # "task-retried": self._handle_task_retried,
-            # "task-rejected": self._handle_task_rejected,
-            # "task-revoked": self._handle_task_revoked,
-            # "worker-heartbeat": self._handle_worker_heartbeat,
+            "task-sent": self._handle_task_sent,
+            "task-received": self._handle_task_received,
+            "task-started": self._handle_task_started,
+            "task-succeeded": self._handle_task_succeeded,
+            "task-failed": self._handle_task_failed,
+            "task-retried": self._handle_task_retried,
+            "task-rejected": self._handle_task_rejected,
+            "task-revoked": self._handle_task_revoked,
+            "worker-heartbeat": self._handle_worker_heartbeat,
             "worker-online": self._handle_worker_status,
             "worker-offline": self._handle_worker_status,
         }
@@ -497,15 +499,22 @@ class Roquefort:
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
 
+        if hostname in self._workers_metadata:
+            self._workers_metadata[hostname]["last_heartbeat"] = time.time()
+        else:
+            self._load_worker_metadata(hostname)
+
         queue_name = (
             get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
+        value = 1 if event.get("alive") else 0
+
         try:
             self._metrics.set_gauge(
                 name="worker_active",
-                value=1,
+                value=value,
                 labels={
                     "hostname": hostname,
                     "worker": worker_name,
@@ -522,9 +531,9 @@ class Roquefort:
         event_type = event.get("type")
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
-        
+
         logging.debug(f"received event {event_type} for worker {hostname}")
-        
+
         if event_type == "worker-online" and hostname not in self._workers_metadata:
             self._load_worker_metadata(hostname)
 
@@ -548,16 +557,15 @@ class Roquefort:
             },
         )
 
-
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
-    
+
     def _load_worker_metadata(self, hostname: str = None) -> None:
-        
+
         if hostname and hostname in self._workers_metadata:
             return
-        
+
         destination = [hostname] if hostname else None 
 
         queues = self._app.control.inspect(destination=destination).active_queues() or {}
