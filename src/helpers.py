@@ -43,6 +43,10 @@ def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
 
     queues = worker_metadata.get("queues", [])
 
+    if not queues:
+        logging.warning(f"no queues found for {worker}")
+        return None
+
     if len(queues) != 1:
         logging.warning(f"multiple queues found for {worker}: {queues}")
         return None
