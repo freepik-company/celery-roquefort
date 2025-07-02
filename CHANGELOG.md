@@ -1,3 +1,9 @@
+## 0.4.14 (2025-07-02)
+
+### Fix
+
+- update Docker build workflow trigger name in release.yaml
+
 ## 0.4.13 (2025-07-02)
 
 ### Refactor
