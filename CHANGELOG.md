@@ -1,3 +1,9 @@
+## 0.4.3 (2025-07-02)
+
+### Fix
+
+- add workflow_dispatch trigger and rename job in Docker image publishing workflow
+
 ## 0.4.2 (2025-07-02)
 
 ### Fix
