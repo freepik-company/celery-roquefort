@@ -1,3 +1,9 @@
+## 0.4.11 (2025-07-02)
+
+### Fix
+
+- add '-at' flag to cz bump command in release workflow
+
 ## 0.4.10 (2025-07-02)
 
 ### Fix
