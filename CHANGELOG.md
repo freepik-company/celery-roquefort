@@ -1,3 +1,9 @@
+## 0.4.1 (2025-07-02)
+
+### Fix
+
+- update Docker image tag pattern in GitHub Actions workflow
+
 ## 0.4.0 (2025-07-02)
 
 ### Feat
