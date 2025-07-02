@@ -44,6 +44,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trigger Docker build workflow
-        run: gh workflow run build-push-docker-image-to-ghcr.yaml --ref "$(git describe --tags --abbrev=0)"
+        run: gh workflow run push-docker-image-to-ghcr.yaml --ref "$(git describe --tags --abbrev=0)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
