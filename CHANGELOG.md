@@ -1,3 +1,9 @@
+## 0.4.9 (2025-07-02)
+
+### Fix
+
+- update regex for semantic version tag matching in GitHub Actions workflow
+
 ## 0.4.8 (2025-07-02)
 
 ### Fix
