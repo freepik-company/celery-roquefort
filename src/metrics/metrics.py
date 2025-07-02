@@ -72,3 +72,16 @@ class MetricService:
 
     def get_registry(self):
         return self._registry
+
+    def remove_gauge_by_label_value(self, name: str, value: str):
+        gauge = self.gauges.get(name)
+
+        if not gauge:
+            logging.info(f"gauge {name} not found. skipping")
+            return
+        labels = list(gauge._metrics.keys())
+
+        for label_list in list(labels):
+            if value in label_list:
+                logging.info(f"removing label {label_list} for gauge {name}")
+                gauge.remove(*label_list)
