@@ -1,3 +1,9 @@
+## 0.4.7 (2025-07-02)
+
+### Fix
+
+- update GitHub Actions workflow to trigger on all tags
+
 ## 0.4.6 (2025-07-02)
 
 ### Fix
