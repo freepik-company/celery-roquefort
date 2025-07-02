@@ -1,3 +1,9 @@
+## 0.4.2 (2025-07-02)
+
+### Fix
+
+- update Docker image tag pattern to allow more flexible versioning
+
 ## 0.4.1 (2025-07-02)
 
 ### Fix
