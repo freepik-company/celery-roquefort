@@ -2,6 +2,7 @@ name: Create and publish a Docker image to ghcr.io
 
 
 on:
+  workflow_dispatch: {}
   push:
     tags:
       - "*.*.*"
@@ -11,6 +12,7 @@ env:
 
 jobs:
   build-and-push-image:
+    name: Build and push image
     runs-on: ubuntu-latest
     permissions:
       contents: write
