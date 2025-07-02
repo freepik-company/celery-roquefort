@@ -48,4 +48,4 @@ COPY ./src .
 EXPOSE 8000
 
 # Run the application.
-CMD python cli.py
+CMD python -m cli
