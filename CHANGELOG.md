@@ -1,3 +1,9 @@
+## 0.4.4 (2025-07-02)
+
+### Fix
+
+- add README.md binding in Dockerfile for dependency installation
+
 ## 0.4.3 (2025-07-02)
 
 ### Fix
