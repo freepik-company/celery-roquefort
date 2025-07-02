@@ -1,10 +1,10 @@
 import asyncio
 import logging
 from pprint import pp, pformat, pprint
-import socket
 import time
 from celery import Celery, Task
 from fastapi import FastAPI
+from celery.events import EventReceiver as Receiver
 
 from .helpers import (
     format_queue_names,
@@ -130,6 +130,39 @@ class Roquefort:
 
         return lifespan
 
+    async def _purger(self):
+        logging.debug("purging metrics")
+        
+        for worker, metadata in self._workers_metadata.items():
+            if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout * 5:
+                logging.debug(f"purging metrics for worker {worker}")
+                continue
+            if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout:
+                logging.debug(f"setting worker_active to 0 for worker {worker}")
+                continue
+
+    async def _purger_loop(self):
+        while not self._shutdown_event.is_set():
+            await self._purger()
+            await asyncio.sleep(self._worker_heartbeat_timeout)
+
+    async def _consume_events(
+        self, receiver: Receiver, loop: asyncio.AbstractEventLoop
+    ):
+        # Use run_in_executor to avoid blocking the event loop
+        await loop.run_in_executor(
+            None,
+            lambda: receiver.capture(limit=None, timeout=None, wakeup=True),
+        )
+
+    async def _consume_events_loop(self, handlers: dict):
+        with self._app.connection() as connection:
+            recv = self._app.events.Receiver(connection, handlers=handlers)
+            loop = asyncio.get_event_loop()
+            while not self._shutdown_event.is_set():
+                await self._consume_events(recv, loop)
+                await asyncio.sleep(1)
+
     async def update_metrics(self):
         logging.info("starting metrics collection")
         self._app = Celery(broker=self._broker_url)
@@ -154,31 +187,10 @@ class Roquefort:
         self._load_worker_metadata()
 
         try:
-            with self._app.connection() as connection:
-                recv = self._app.events.Receiver(connection, handlers=handlers)
-                loop = asyncio.get_event_loop()
+            consume_task = asyncio.create_task(self._consume_events_loop(handlers))
+            purge_task = asyncio.create_task(self._purger_loop())
 
-                while not self._shutdown_event.is_set():
-                    try:
-                        logging.debug("updating metrics")
-                        # Use run_in_executor to avoid blocking the event loop
-                        await loop.run_in_executor(
-                            None,
-                            lambda: recv.capture(limit=None, timeout=1, wakeup=True),
-                        )
-                    except socket.timeout:
-                        # Timeout is expected, just continue
-                        continue
-                    except (KeyboardInterrupt, SystemExit):
-                        logging.info("Shutdown signal received in metrics collection")
-                        self._shutdown_event.set()
-                        raise
-                    except Exception as e:
-                        if self._shutdown_event.is_set():
-                            break
-                        logging.exception(f"Error in update_metrics: {e}")
-
-                    await asyncio.sleep(1)
+            await asyncio.wait([consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED)
 
         except (KeyboardInterrupt, SystemExit):
             logging.info("Shutdown signal received, stopping metrics collection")
@@ -227,23 +239,11 @@ class Roquefort:
                 f"event {event_type} not tracked. Will be processed as {metric_name}"
             )
 
-    def _handle_task_generic(
-        self, event: dict, task: Task, metric_name: str, labels: dict = {}
-    ):
-        event_type = event.get("type")
-
-        logging.debug(f"event of type {event_type} received")
-
-        if event_type not in self._tracked_events:
-            logging.warning(
-                f"event {event_type} not tracked. Will be processed as {metric_name}"
-            )
-
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
             logging.error(f"error setting {metric_name} metric: {e}")
-            logging.error(f"error setting {metric_name} metric: {e}")
+
 
     def _handle_task_sent(self, event):
         task: Task = self._get_task_from_event(event)
@@ -507,7 +507,7 @@ class Roquefort:
             or self._default_queue_name
         )
 
-        value = 1 if event.get("alive") else 0
+        value = 1
 
         try:
             self._metrics.set_gauge(
@@ -558,12 +558,12 @@ class Roquefort:
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
-    
+
     def _load_worker_metadata(self, hostname: str = None) -> None:
-        
+
         if hostname and hostname in self._workers_metadata:
             return
-        
+
         destination = [hostname] if hostname else None 
 
         queues = self._app.control.inspect(destination=destination).active_queues() or {}
