@@ -1,3 +1,9 @@
+## 0.4.16 (2025-07-02)
+
+### Fix
+
+- correct source code copy path in Dockerfile
+
 ## 0.4.15 (2025-07-02)
 
 ### Fix
