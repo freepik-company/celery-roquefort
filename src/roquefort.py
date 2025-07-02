@@ -140,8 +140,7 @@ class Roquefort:
             queue_name = metadata["queues"][0] or self._default_queue_name
 
             if (
-                hostname.startswith("a1111-upscaler")
-                or time.time() - metadata["last_heartbeat"]
+                time.time() - metadata["last_heartbeat"]
                 > self._worker_heartbeat_timeout * 5
             ):
                 logging.warning(f"purging metrics for worker {worker}")
