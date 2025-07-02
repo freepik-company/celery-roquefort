@@ -1,5 +1,10 @@
 name: Release
 
+permissions:
+  contents: write
+  packages: write
+  actions: write
+
 on:
   push:
     branches: [main]
@@ -19,8 +24,11 @@ jobs:
         with:
           python-version: "3.9"
 
-      - name: Install commitizen
-        run: pip install commitizen
+      - name: Install commitizen and gh
+        run: |
+          pip install commitizen
+          sudo apt-get update
+          sudo apt-get install -y gh
 
       - name: Configure git
         run: |
@@ -32,5 +40,10 @@ jobs:
           cz bump --changelog --yes -at
           git push
           git push --tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Docker build workflow
+        run: gh workflow run build-push-docker-image-to-ghcr.yaml --ref "$(git describe --tags --abbrev=0)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
