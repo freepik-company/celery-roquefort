@@ -1,3 +1,9 @@
+## 0.4.5 (2025-07-02)
+
+### Fix
+
+- update bind mounts in Dockerfile to use correct target paths
+
 ## 0.4.4 (2025-07-02)
 
 ### Fix
