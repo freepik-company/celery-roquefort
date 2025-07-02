@@ -7,7 +7,7 @@
 # Want to help us make this template better? Share your feedback here: https://forms.gle/ybq9Krt8jtBL3iCk7
 
 ARG PYTHON_VERSION=3.9.6
-FROM python:${PYTHON_VERSION}-slim AS base
+FROM python:${PYTHON_VERSION}-slim as base
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -24,8 +24,9 @@ ARG UID=10001
 RUN adduser \
     --disabled-password \
     --gecos "" \
-    --home "/home/appuser" \
+    --home "/nonexistent" \
     --shell "/sbin/nologin" \
+    --no-create-home \
     --uid "${UID}" \
     appuser
 
@@ -33,17 +34,9 @@ RUN adduser \
 # Leverage a cache mount to /root/.cache/pip to speed up subsequent builds.
 # Leverage a bind mount to requirements.txt to avoid having to copy them into
 # into this layer.
-RUN pip install uv
-
-# Install dependencies using uv
 RUN --mount=type=cache,target=/root/.cache/pip \
-    --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
-    --mount=type=bind,source=README.md,target=/app/README.md \
-    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
-    uv sync
-
-# Create cache directory for appuser and set permissions
-RUN mkdir -p /home/appuser/.cache && chown -R appuser:appuser /home/appuser/.cache
+    --mount=type=bind,source=requirements.txt,target=requirements.txt \
+    python -m pip install -r requirements.txt
 
 # Switch to the non-privileged user to run the application.
 USER appuser
@@ -51,11 +44,8 @@ USER appuser
 # Copy the source code into the container.
 COPY ./src .
 
-# Set UV cache directory for the non-privileged user
-ENV UV_CACHE_DIR=/home/appuser/.cache/uv
-
 # Expose the port that the application listens on.
 EXPOSE 8000
 
-# Run the application using uv run to use the virtual environment
-CMD ["uv", "run", "python", "roquefort.py"]
+# Run the application.
+CMD python cli.py
