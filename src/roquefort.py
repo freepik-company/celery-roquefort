@@ -155,7 +155,10 @@ class Roquefort:
                 workers_to_remove.append(worker)
                 continue
 
-            if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout:
+            if (
+                time.time() - metadata["last_heartbeat"]
+                > self._worker_heartbeat_timeout
+            ):
                 logging.debug(f"setting worker_active to 0 for worker {worker}")
                 self._metrics.set_gauge(
                     name="worker_active",
@@ -220,7 +223,9 @@ class Roquefort:
             consume_task = asyncio.create_task(self._consume_events_loop(handlers))
             purge_task = asyncio.create_task(self._purger_loop())
 
-            await asyncio.wait([consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                [consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED
+            )
 
         except (KeyboardInterrupt, SystemExit):
             logging.info("Shutdown signal received, stopping metrics collection")
