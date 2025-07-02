@@ -1,3 +1,9 @@
+## 0.3.0 (2025-07-02)
+
+### Feat
+
+- add timeout purge for worker metrics (#13)
+
 ## 0.2.0 (2025-07-01)
 
 ### Feat
