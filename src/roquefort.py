@@ -231,10 +231,8 @@ class Roquefort:
                 raise
         finally:
             logging.info("metrics collection stopped")
-            logging.info("metrics collection stopped")
 
     async def run(self):
-        logging.info("starting Roquefort")
         logging.info("starting Roquefort")
 
         try:
@@ -247,10 +245,8 @@ class Roquefort:
             await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
             logging.info("shutdown signal received, stopping Roquefort gracefully")
-            logging.info("shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
         except Exception as e:
-            logging.exception(f"fatal error in run: {e}")
             logging.exception(f"fatal error in run: {e}")
             self._shutdown_event.set()
             raise
@@ -320,25 +316,6 @@ class Roquefort:
             "queue_name": queue_name,
         }
 
-        task = self._get_task_from_event(event)
-
-        queue_name = (
-            getattr(task, "queue")
-            or get_queue_name_from_worker_metadata(
-                event.get("hostname"), self._workers_metadata
-            )
-            or self._default_queue_name
-        )
-
-        worker_name, _ = get_worker_names(event.get("hostname"))
-
-        labels = {
-            "name": event.get("name"),
-            "worker": worker_name,
-            "hostname": event.get("hostname"),
-            "queue_name": queue_name,
-        }
-
         self._handle_task_generic(
             event=event,
             task=task,
@@ -347,17 +324,6 @@ class Roquefort:
         )
 
     def _handle_task_started(self, event):
-        task = self._get_task_from_event(event)
-
-        hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
-        queue_name = (
-            getattr(task, "queue")
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
-
         task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
@@ -382,17 +348,6 @@ class Roquefort:
         )
 
     def _handle_task_succeeded(self, event):
-        task = self._get_task_from_event(event)
-
-        hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
-        queue_name = (
-            getattr(task, "queue")
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
-
         task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
@@ -587,28 +542,6 @@ class Roquefort:
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
-
-    def _load_worker_metadata(self, hostname: str = None) -> None:
-
-        if hostname and hostname in self._workers_metadata:
-            return
-
-        destination = [hostname] if hostname else None 
-
-        queues = self._app.control.inspect(destination=destination).active_queues() or {}
-
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
-
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
-
-                if not queue_name:
-                    continue
-
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
 
     def _load_worker_metadata(self, hostname: str = None) -> None:
 
