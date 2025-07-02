@@ -1,3 +1,9 @@
+## 0.4.13 (2025-07-02)
+
+### Refactor
+
+- update GitHub Actions release workflow to include permissions and trigger Docker build
+
 ## 0.4.12 (2025-07-02)
 
 ### Fix
