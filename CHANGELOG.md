@@ -1,3 +1,9 @@
+## 0.3.1 (2025-07-02)
+
+### Fix
+
+- load worker metadata defined twice (#14)
+
 ## 0.3.0 (2025-07-02)
 
 ### Feat
