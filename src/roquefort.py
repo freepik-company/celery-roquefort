@@ -137,7 +137,11 @@ class Roquefort:
         for worker, metadata in self._workers_metadata.items():
             hostname = worker
             worker_name, _ = get_worker_names(hostname)
-            queue_name = metadata["queues"][0] or self._default_queue_name
+            queue_name = (
+                metadata["queues"][0]
+                if metadata["queues"]
+                else self._default_queue_name
+            )
 
             if (
                 time.time() - metadata["last_heartbeat"]
@@ -150,7 +154,7 @@ class Roquefort:
                 )
                 workers_to_remove.append(worker)
                 continue
-            
+
             if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout:
                 logging.debug(f"setting worker_active to 0 for worker {worker}")
                 self._metrics.set_gauge(
@@ -163,7 +167,7 @@ class Roquefort:
                     },
                 )
                 continue
-            
+
         for worker in workers_to_remove:
             del self._workers_metadata[worker]
 
