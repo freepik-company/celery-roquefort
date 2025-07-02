@@ -132,14 +132,41 @@ class Roquefort:
 
     async def _purger(self):
         logging.debug("purging metrics")
-        
+        workers_to_remove = []
+
         for worker, metadata in self._workers_metadata.items():
-            if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout * 5:
-                logging.debug(f"purging metrics for worker {worker}")
+            hostname = worker
+            worker_name, _ = get_worker_names(hostname)
+            queue_name = metadata["queues"][0] or self._default_queue_name
+
+            if (
+                hostname.startswith("a1111-upscaler")
+                or time.time() - metadata["last_heartbeat"]
+                > self._worker_heartbeat_timeout * 5
+            ):
+                logging.warning(f"purging metrics for worker {worker}")
+                self._metrics.remove_gauge_by_label_value(
+                    name="worker_active",
+                    value=hostname,
+                )
+                workers_to_remove.append(worker)
                 continue
+            
             if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout:
                 logging.debug(f"setting worker_active to 0 for worker {worker}")
+                self._metrics.set_gauge(
+                    name="worker_active",
+                    value=0,
+                    labels={
+                        "hostname": hostname,
+                        "worker": worker_name,
+                        "queue_name": queue_name,
+                    },
+                )
                 continue
+            
+        for worker in workers_to_remove:
+            del self._workers_metadata[worker]
 
     async def _purger_loop(self):
         while not self._shutdown_event.is_set():
@@ -152,7 +179,7 @@ class Roquefort:
         # Use run_in_executor to avoid blocking the event loop
         await loop.run_in_executor(
             None,
-            lambda: receiver.capture(limit=None, timeout=None, wakeup=True),
+            lambda: receiver.capture(limit=None, timeout=10, wakeup=True),
         )
 
     async def _consume_events_loop(self, handlers: dict):
@@ -243,7 +270,6 @@ class Roquefort:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
             logging.error(f"error setting {metric_name} metric: {e}")
-
 
     def _handle_task_sent(self, event):
         task: Task = self._get_task_from_event(event)
