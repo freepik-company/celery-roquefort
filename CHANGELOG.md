@@ -1,3 +1,9 @@
+## 0.3.2 (2025-07-02)
+
+### Fix
+
+- avoid index error when accessing lists (#15)
+
 ## 0.3.1 (2025-07-02)
 
 ### Fix
