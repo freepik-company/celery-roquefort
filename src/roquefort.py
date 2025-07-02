@@ -592,8 +592,11 @@ class Roquefort:
 
     def _load_worker_metadata(self, hostname: str = None) -> None:
 
+
         if hostname and hostname in self._workers_metadata:
             return
+
+        destination = [hostname] if hostname else None 
 
         destination = [hostname] if hostname else None
 
