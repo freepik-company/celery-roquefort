@@ -1,3 +1,9 @@
+## 0.4.8 (2025-07-02)
+
+### Fix
+
+- update GitHub Actions workflow to trigger on semantic version tags
+
 ## 0.4.7 (2025-07-02)
 
 ### Fix
