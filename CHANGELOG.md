@@ -1,3 +1,9 @@
+## 0.4.15 (2025-07-02)
+
+### Fix
+
+- update CMD instruction in Dockerfile to use module syntax
+
 ## 0.4.14 (2025-07-02)
 
 ### Fix
