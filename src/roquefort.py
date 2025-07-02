@@ -150,8 +150,11 @@ class Roquefort:
                 )
                 workers_to_remove.append(worker)
                 continue
-            
-            if time.time() - metadata["last_heartbeat"] > self._worker_heartbeat_timeout:
+
+            if (
+                time.time() - metadata["last_heartbeat"]
+                > self._worker_heartbeat_timeout
+            ):
                 logging.debug(f"setting worker_active to 0 for worker {worker}")
                 self._metrics.set_gauge(
                     name="worker_active",
@@ -163,7 +166,7 @@ class Roquefort:
                     },
                 )
                 continue
-            
+
         for worker in workers_to_remove:
             del self._workers_metadata[worker]
 
@@ -216,7 +219,9 @@ class Roquefort:
             consume_task = asyncio.create_task(self._consume_events_loop(handlers))
             purge_task = asyncio.create_task(self._purger_loop())
 
-            await asyncio.wait([consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                [consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED
+            )
 
         except (KeyboardInterrupt, SystemExit):
             logging.info("Shutdown signal received, stopping metrics collection")
@@ -586,38 +591,24 @@ class Roquefort:
 
     def _load_worker_metadata(self, hostname: str = None) -> None:
 
-        if hostname and hostname in self._workers_metadata:
-            return
-
-        destination = [hostname] if hostname else None 
-
-        queues = self._app.control.inspect(destination=destination).active_queues() or {}
-
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
-
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
-
-                if not queue_name:
-                    continue
-
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
-
-    def _load_worker_metadata(self, hostname: str = None) -> None:
 
         if hostname and hostname in self._workers_metadata:
             return
 
         destination = [hostname] if hostname else None 
 
-        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+        destination = [hostname] if hostname else None
+
+        queues = (
+            self._app.control.inspect(destination=destination).active_queues() or {}
+        )
 
         for worker_name, queue_info_list in queues.items():
             if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+                self._workers_metadata[worker_name] = {
+                    "queues": [],
+                    "last_heartbeat": time.time(),
+                }
 
             for queue_info in queue_info_list:
                 queue_name = queue_info.get("name")
