@@ -1,3 +1,9 @@
+## 0.4.0 (2025-07-02)
+
+### Feat
+
+- add GitHub Actions workflow for Docker image publishing to ghcr.io (#16)
+
 ## 0.3.2 (2025-07-02)
 
 ### Fix
