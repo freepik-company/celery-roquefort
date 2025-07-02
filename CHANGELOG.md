@@ -1,3 +1,9 @@
+## 0.4.6 (2025-07-02)
+
+### Fix
+
+- update Dockerfile to improve user permissions and streamline dependency installation
+
 ## 0.4.5 (2025-07-02)
 
 ### Fix
