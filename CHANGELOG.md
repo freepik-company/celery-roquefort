@@ -1,3 +1,9 @@
+## 0.4.10 (2025-07-02)
+
+### Fix
+
+- modify tag matching in GitHub Actions workflow to support all versions
+
 ## 0.4.9 (2025-07-02)
 
 ### Fix
