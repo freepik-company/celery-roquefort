@@ -14,7 +14,7 @@ metadata:
 spec:
   endpoints:
     - port: http
-      interval: {{ .Values.serviceMonitor.scrapeInterval | default "15s" }}
+      interval: {{ .Values.serviceMonitor.interval | default "15s" }}
     {{- if .Values.serviceMonitor.honorLabels }}
       honorLabels: true
     {{- end }}
