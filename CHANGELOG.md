@@ -1,3 +1,9 @@
+## 0.6.1 (2025-07-03)
+
+### Fix
+
+- add tag push triggers for Docker and Helm chart release workflows
+
 ## 0.6.0 (2025-07-03)
 
 ### Feat
