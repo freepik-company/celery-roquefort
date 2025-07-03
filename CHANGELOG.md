@@ -1,3 +1,9 @@
+## 0.6.2 (2025-07-03)
+
+### Fix
+
+- avoid AttributeError when access to task queue in some scenarios (#19)
+
 ## 0.6.1 (2025-07-03)
 
 ### Fix
