@@ -1,4 +1,4 @@
-name: Release
+name: Release Version Tag
 
 permissions:
   contents: write
@@ -38,17 +38,21 @@ jobs:
       - name: Create release
         run: |
           cz bump --changelog --yes -at
+          sed -i "s/version: .*/version: $(git describe --tags --abbrev=0)/" charts/celery-roquefort/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: $(git describe --tags --abbrev=0)/" charts/celery-roquefort/Chart.yaml
+          git add charts/celery-roquefort/Chart.yaml
+          git commit --amend --no-edit
           git push
           git push --tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trigger Docker build workflow
-        run: gh workflow run push-docker-image-to-ghcr.yaml --ref "$(git describe --tags --abbrev=0)"
+        run: gh workflow run release-docker.yaml --ref "$(git describe --tags --abbrev=0)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Trigger Helm chart release workflow
-        run: gh workflow run helm-chart-release.yaml --ref "$(git describe --tags --abbrev=0)"
+        run: gh workflow run release-helm-chart.yaml --ref "$(git describe --tags --abbrev=0)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

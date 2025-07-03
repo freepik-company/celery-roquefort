@@ -1,11 +1,8 @@
-name: "Create and publish a Docker image to ghcr.io"
+name: "Release Docker Image"
 
 on:
   workflow_dispatch: {}
-  push:
-    tags:
-      - '*'
-      - 'v*'
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
