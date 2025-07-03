@@ -1,3 +1,9 @@
+## 0.5.0 (2025-07-03)
+
+### Feat
+
+- add chart for kubernetes easy deployment (#17)
+
 ## 0.4.16 (2025-07-02)
 
 ### Fix
