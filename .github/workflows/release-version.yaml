@@ -38,7 +38,6 @@ jobs:
       - name: Create release
         run: |
           cz bump --changelog --yes -at
-          sed -i "s/version: .*/version: $(git describe --tags --abbrev=0)/" charts/celery-roquefort/Chart.yaml
           sed -i "s/appVersion: .*/appVersion: $(git describe --tags --abbrev=0)/" charts/celery-roquefort/Chart.yaml
           git add charts/celery-roquefort/Chart.yaml
           git commit --amend --no-edit
