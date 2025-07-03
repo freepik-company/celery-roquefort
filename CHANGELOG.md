@@ -1,3 +1,9 @@
+## 0.6.3 (2025-07-03)
+
+### Fix
+
+- add workflow_dispatch trigger to release version workflow
+
 ## 0.6.2 (2025-07-03)
 
 ### Fix
