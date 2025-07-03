@@ -1,3 +1,9 @@
+## 0.6.0 (2025-07-03)
+
+### Feat
+
+- add env vars from values to deployment (#18)
+
 ## 0.5.0 (2025-07-03)
 
 ### Feat
