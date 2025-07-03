@@ -47,3 +47,8 @@ jobs:
         run: gh workflow run push-docker-image-to-ghcr.yaml --ref "$(git describe --tags --abbrev=0)"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trigger Helm chart release workflow
+        run: gh workflow run helm-chart-release.yaml --ref "$(git describe --tags --abbrev=0)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
