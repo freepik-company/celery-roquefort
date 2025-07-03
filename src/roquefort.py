@@ -305,7 +305,7 @@ class Roquefort:
         task = self._get_task_from_event(event)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(
                 event.get("hostname"), self._workers_metadata
             )
@@ -335,7 +335,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
@@ -359,7 +359,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
@@ -383,7 +383,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
@@ -411,7 +411,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
@@ -439,7 +439,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
@@ -463,7 +463,7 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
-            getattr(task, "queue")
+            getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
