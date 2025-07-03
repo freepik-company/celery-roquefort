@@ -5,9 +5,7 @@ metadata:
   labels:
     {{- include "celery-roquefort.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "celery-roquefort.selectorLabels" . | nindent 6 }}
