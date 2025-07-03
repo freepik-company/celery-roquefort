@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   celery-roquefort:
   - apiVersion: v2
+    appVersion: 0.6.0
+    created: "2025-07-03T14:20:29.440143228Z"
+    description: A Helm chart for Celery Roquefort
+    digest: 97e55027f50d9cafa88b16409799320549d726949baafde2e914d5925c637532
+    home: https://github.com/freepik-company/celery-roquefort
+    keywords:
+    - celerty
+    - metrics
+    - prometheus
+    maintainers:
+    - email: jamuriano@freepik.com
+      name: José Antonio Muriano Criado
+    name: celery-roquefort
+    sources:
+    - https://github.com/freepik-company/celery-roquefort
+    type: application
+    urls:
+    - https://github.com/freepik-company/celery-roquefort/releases/download/celery-roquefort-chart-0.6.0/celery-roquefort-0.6.0.tgz
+    version: 0.6.0
+  - apiVersion: v2
     appVersion: 1.16.0
     created: "2025-07-03T09:31:08.775707662Z"
     description: A Helm chart for Celery Roquefort
@@ -21,4 +41,4 @@ entries:
     urls:
     - https://github.com/freepik-company/celery-roquefort/releases/download/celery-roquefort-chart-0.1.0/celery-roquefort-0.1.0.tgz
     version: 0.1.0
-generated: "2025-07-03T09:31:08.775715186Z"
+generated: "2025-07-03T14:20:29.44015517Z"
