@@ -1,3 +1,9 @@
+## 0.6.4 (2025-07-03)
+
+### Fix
+
+- add workflow_dispatch trigger to Docker and Helm chart release workflows
+
 ## 0.6.3 (2025-07-03)
 
 ### Fix
