@@ -1,3 +1,9 @@
+## 0.7.0 (2025-07-04)
+
+### Feat
+
+- add metrics for queue length (#20)
+
 ## 0.6.4 (2025-07-03)
 
 ### Fix
