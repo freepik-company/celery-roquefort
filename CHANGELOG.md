@@ -1,3 +1,9 @@
+## 0.8.0 (2025-07-04)
+
+### Feat
+
+- add metrics handling for active worker tasks (#21)
+
 ## 0.7.0 (2025-07-04)
 
 ### Feat
