@@ -388,6 +388,7 @@ class Roquefort:
         task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
+        runtime = event.get("runtime")
         worker_name, _ = get_worker_names(hostname)
 
         queue_name = (
@@ -395,18 +396,33 @@ class Roquefort:
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
+        task_name = getattr(task, "name")
 
         self._handle_task_generic(
             event=event,
             task=task,
             metric_name="task_succeeded",
             labels={
-                "name": getattr(task, "name"),
+                "name": task_name,
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
             },
         )
+        
+        try:
+            self._metrics.register_histogram(
+                name="task_runtime",
+                value=runtime,
+                labels={
+                    "name": getattr(task, "name"),
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                },
+            )
+        except Exception as e:
+            logging.error(f"error setting task_runtime metric: {e}")
+            
 
     def _handle_task_failed(self, event):
         task = self._get_task_from_event(event)
