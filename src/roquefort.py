@@ -415,7 +415,7 @@ class Roquefort:
                 name="task_runtime",
                 value=runtime,
                 labels={
-                    "name": getattr(task, "name"),
+                    "name": task_name,
                     "hostname": hostname,
                     "queue_name": queue_name,
                 },
