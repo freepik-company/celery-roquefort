@@ -52,7 +52,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Trigger Helm chart release workflow
-        run: gh workflow run release-helm-chart.yaml --ref "$(git describe --tags --abbrev=0)"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
