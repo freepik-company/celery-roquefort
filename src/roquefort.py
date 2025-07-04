@@ -548,7 +548,22 @@ class Roquefort:
         except Exception as e:
             logging.error(f"error setting worker_active metric: {e}")
 
-        # todo: add metrics handling for active processes.
+        active_tasks = event.get("active", 0)
+        
+        try: 
+            self._metrics.set_gauge(
+                name="worker_tasks_active",
+                value=active_tasks,
+                labels={
+                    "hostname": hostname,
+                    "worker": worker_name,
+                    "queue_name": queue_name,
+                },
+            )
+        except Exception as e:
+            logging.error(f"error setting worker_tasks_active metric: {e}")
+        
+        
         # todo: add metrics handling for processed tasks.
 
     def _handle_worker_status(self, event):
