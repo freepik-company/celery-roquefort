@@ -112,11 +112,6 @@ class Roquefort:
             labels=["queue_name"],
         )
         self._metrics.create_gauge(
-            "active_worker_count",
-            "The number of active workers in broker queue.",
-            labels=["queue_name"],
-        )
-        self._metrics.create_gauge(
             "active_process_count",
             "The number of active processes in broker queue.",
             labels=["queue_name"],
