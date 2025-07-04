@@ -1,18 +1,8 @@
 import asyncio
-from contextlib import asynccontextmanager
 import logging
-import time
-from typing import Callable
-from fastapi import FastAPI
-import uvicorn
 from prometheus_client import (
-    disable_created_metrics,
-    make_asgi_app,
-    Counter,
     start_http_server,
 )
-
-from ..metrics.metrics import MetricService
 
 
 class HttpServer:

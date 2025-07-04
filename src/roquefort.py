@@ -9,8 +9,10 @@ from celery.events import EventReceiver as Receiver
 from .helpers import (
     format_queue_names,
     get_exception_name,
+    get_queue_length,
     get_queue_name_from_worker_metadata,
     get_worker_names,
+    is_valid_transport,
 )
 
 from .metrics.metrics import MetricService
@@ -28,6 +30,7 @@ class Roquefort:
         custom_labels: dict = None,
         default_queue_name: str = None,
         worker_heartbeat_timeout: int = 60,
+        queue_length_interval: int = 10,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -44,6 +47,8 @@ class Roquefort:
         self._tracked_events = []
         self._default_queue_name = default_queue_name
         self._worker_heartbeat_timeout = worker_heartbeat_timeout
+        self._queue_length_interval = queue_length_interval
+        self._queues = []
 
         # Create metrics
         #   Counters
@@ -185,7 +190,7 @@ class Roquefort:
         # Use run_in_executor to avoid blocking the event loop
         await loop.run_in_executor(
             None,
-            lambda: receiver.capture(limit=None, timeout=10, wakeup=True),
+            lambda: receiver.capture(limit=None, timeout=None, wakeup=True),
         )
 
     async def _consume_events_loop(self, handlers: dict):
@@ -195,11 +200,42 @@ class Roquefort:
             while not self._shutdown_event.is_set():
                 await self._consume_events(recv, loop)
                 await asyncio.sleep(1)
+                
+    async def _calculate_queue_length(self):
+        with self._app.connection() as connection:
+            transport = connection.info().get("transport")
+            
+            if not is_valid_transport(transport):
+                logging.info(f"invalid transport {transport} detected. skipping queue length calculation")
+                return
+            
+            for queue_name in self._queues:
+                length = get_queue_length(connection, transport, queue_name)
+                
+                self._metrics.set_gauge(
+                    name="queue_length",
+                    value=length,
+                    labels={"queue_name": queue_name},
+                )
+    
+    async def _calculate_queue_length_loop(self):
+        while not self._shutdown_event.is_set():
+            await self._calculate_queue_length()
+            await asyncio.sleep(self._queue_length_interval)
 
     async def update_metrics(self):
+        """
+        Update metrics for the current state of the system.
+        
+        This method is responsible for:
+        - Consuming events from the broker
+        - Purging metrics for inactive workers
+        - Calculating queue length for all queues
+        """
         logging.info("starting metrics collection")
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
+        
         handlers = {
             "task-sent": self._handle_task_sent,
             "task-received": self._handle_task_received,
@@ -222,9 +258,10 @@ class Roquefort:
         try:
             consume_task = asyncio.create_task(self._consume_events_loop(handlers))
             purge_task = asyncio.create_task(self._purger_loop())
+            queue_length_task = asyncio.create_task(self._calculate_queue_length_loop())
 
             await asyncio.wait(
-                [consume_task, purge_task], return_when=asyncio.FIRST_COMPLETED
+                [consume_task, purge_task, queue_length_task], return_when=asyncio.FIRST_COMPLETED
             )
 
         except (KeyboardInterrupt, SystemExit):
@@ -566,6 +603,9 @@ class Roquefort:
 
                 if not queue_name:
                     continue
+                
+                if queue_name not in self._queues:
+                    self._queues.append(queue_name)
 
                 if queue_name not in self._workers_metadata[worker_name]["queues"]:
                     self._workers_metadata[worker_name]["queues"].append(queue_name)
