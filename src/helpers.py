@@ -62,3 +62,30 @@ def get_exception_name(message: str) -> str:
     if match:
         return match.group(1)
     return "unknown"
+
+
+def is_valid_transport(transport: str) -> bool:
+    """Check if the transport is valid.
+
+    Args:
+        transport (str): The transport name.
+    """
+    
+    # TODO: add more transports
+    return transport in ["redis", "rediss", "sentinel"]
+
+def get_queue_length(connection, transport: str, queue_name: str) -> int:
+    
+    if transport in ["redis", "rediss", "sentinel"]:
+        return get_redis_queue_length(connection, queue_name)
+    
+    return 0
+
+def get_redis_queue_length(connection, queue_name: str) -> int:
+    """Get the length of a Redis queue.
+
+    Args:
+        connection (Connection): The Redis connection.
+        queue_name (str): The name of the queue.
+    """
+    return connection.default_channel.client.llen(queue_name)
