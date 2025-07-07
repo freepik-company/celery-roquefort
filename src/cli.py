@@ -90,6 +90,12 @@ def parse_custom_labels(ctx, param, value):
     envvar="CR_DEFAULT_QUEUE_NAME",
     help="Default queue name. Env: CR_DEFAULT_QUEUE_NAME",
 )
+@click.option(
+    "--queues",
+    default=None,
+    envvar="CR_QUEUES",
+    help="Queues to monitor. Env: CR_QUEUES",
+)
 @click.version_option(version="0.1.0", prog_name="roquefort")
 def main(
     env_prefix: str,
@@ -100,6 +106,7 @@ def main(
     custom_labels: Dict[str, Any],
     verbose: bool,
     default_queue_name: str = "unknown-queue",
+    queues: str = None,
 ):
     """
     Celery Roquefort - Prometheus metrics collector for Celery tasks and workers.
@@ -121,6 +128,7 @@ def main(
     CR_CUSTOM_LABELS  - Custom labels (key=value,key2=value2 or JSON)
     CR_VERBOSE        - Enable verbose logging (set to 1)
     CR_ENV_PREFIX     - Change the environment variable prefix
+    CR_QUEUES         - Queues to be monitored by roquefort. Comma separated values
 
     Examples:
 
@@ -133,6 +141,7 @@ def main(
     export CR_BROKER_URL=redis://localhost:6379/0
     export CR_HOST=127.0.0.1
     export CR_PORT=9090
+    export CR_QUEUES=queue1,queue2,queue3
     roquefort
 
     \b
@@ -180,9 +189,16 @@ def main(
             env_vars_used.append(f"{env_prefix}VERBOSE")
         if os.getenv(f"{env_prefix}DEFAULT_QUEUE_NAME"):
             env_vars_used.append(f"{env_prefix}DEFAULT_QUEUE_NAME")
+        if os.getenv(f"{env_prefix}QUEUES"):
+            env_vars_used.append(f"{env_prefix}QUEUES")
 
         if env_vars_used:
             click.echo(f"Using environment variables: {', '.join(env_vars_used)}")
+
+    if queues:
+        queues = [queue.strip() for queue in queues.split(",")]
+        if any(not queue for queue in queues):
+            raise ValueError("Queue names cannot be empty")
 
     try:
         roquefort = Roquefort(
@@ -192,6 +208,7 @@ def main(
             prefix=prefix,
             custom_labels=custom_labels,
             default_queue_name=default_queue_name,
+            queues=queues,
         )
 
         click.echo("🧀 Starting Roquefort metrics collector...")
