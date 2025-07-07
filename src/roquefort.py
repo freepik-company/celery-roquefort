@@ -541,36 +541,37 @@ class Roquefort:
             get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-
-        value = 1
-
-        try:
-            self._metrics.set_gauge(
-                name="worker_active",
-                value=value,
-                labels={
-                    "hostname": hostname,
-                    "worker": worker_name,
-                    "queue_name": queue_name,
-                },
-            )
-        except Exception as e:
-            logging.error(f"error setting worker_active metric: {e}")
-
-        active_tasks = event.get("active", 0)
         
-        try: 
-            self._metrics.set_gauge(
-                name="worker_tasks_active",
-                value=active_tasks,
-                labels={
-                    "hostname": hostname,
-                    "worker": worker_name,
-                    "queue_name": queue_name,
-                },
-            )
-        except Exception as e:
-            logging.error(f"error setting worker_tasks_active metric: {e}")
+        if self._should_monitor_queue(queue_name):
+            value = 1
+    
+            try:
+                self._metrics.set_gauge(
+                    name="worker_active",
+                    value=value,
+                    labels={
+                        "hostname": hostname,
+                        "worker": worker_name,
+                        "queue_name": queue_name,
+                    },
+                )
+            except Exception as e:
+                logging.error(f"error setting worker_active metric: {e}")
+    
+            active_tasks = event.get("active", 0)
+            
+            try: 
+                self._metrics.set_gauge(
+                    name="worker_tasks_active",
+                    value=active_tasks,
+                    labels={
+                        "hostname": hostname,
+                        "worker": worker_name,
+                        "queue_name": queue_name,
+                    },
+                )
+            except Exception as e:
+                logging.error(f"error setting worker_tasks_active metric: {e}")
         
         
         # todo: add metrics handling for processed tasks.
@@ -585,32 +586,32 @@ class Roquefort:
         if event_type == "worker-online" and hostname not in self._workers_metadata:
             self._load_worker_metadata(hostname)
 
-        value = 0
-
         queue_name = (
             get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-
-        if event_type == "worker-online":
-            value = 1
-
-        self._metrics.set_gauge(
-            name="worker_active",
-            value=value,
-            labels={
-                "hostname": hostname,
-                "worker": worker_name,
-                "queue_name": queue_name,
-            },
-        )
+        
+        if self._should_monitor_queue(queue_name):
+            value = 0
+    
+            if event_type == "worker-online":
+                value = 1
+    
+            self._metrics.set_gauge(
+                name="worker_active",
+                value=value,
+                labels={
+                    "hostname": hostname,
+                    "worker": worker_name,
+                    "queue_name": queue_name,
+                },
+            )
 
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
         return self._state.tasks.get(event.get("uuid"))
 
     def _load_worker_metadata(self, hostname: str = None) -> None:
-
         if hostname and hostname in self._workers_metadata:
             return
 
