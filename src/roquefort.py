@@ -31,6 +31,7 @@ class Roquefort:
         default_queue_name: str = None,
         worker_heartbeat_timeout: int = 60,
         queue_length_interval: int = 10,
+        queues: list[str] = None,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -49,6 +50,7 @@ class Roquefort:
         self._worker_heartbeat_timeout = worker_heartbeat_timeout
         self._queue_length_interval = queue_length_interval
         self._queues = []
+        self._monitored_queues = queues
 
         # Create metrics
         #   Counters
@@ -311,31 +313,22 @@ class Roquefort:
         task: Task = self._get_task_from_event(event)
         queue_name = event.get("queue") or self._default_queue_name
 
-        labels = {
-            "name": event.get("name"),
-            "hostname": event.get("hostname"),
-            "queue_name": queue_name,
-        }
-
-        task: Task = self._get_task_from_event(event)
-        queue_name = event.get("queue") or self._default_queue_name
-
-        labels = {
-            "name": event.get("name"),
-            "hostname": event.get("hostname"),
-            "queue_name": queue_name,
-        }
-
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_sent",
-            labels=labels,
-        )
+        if self._should_monitor_queue(queue_name):
+            labels = {
+                "name": event.get("name"),
+                "hostname": event.get("hostname"),
+                "queue_name": queue_name,
+            }
+    
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_sent",
+                labels=labels,
+            )
 
     def _handle_task_received(self, event):
-        task = self._get_task_from_event(event)
-
+        task: Task = self._get_task_from_event(event)
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(
@@ -343,190 +336,195 @@ class Roquefort:
             )
             or self._default_queue_name
         )
+        
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(event.get("hostname"))
 
-        worker_name, _ = get_worker_names(event.get("hostname"))
-
-        labels = {
-            "name": event.get("name"),
-            "worker": worker_name,
-            "hostname": event.get("hostname"),
-            "queue_name": queue_name,
-        }
-
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_received",
-            labels=labels,
-        )
+            labels = {
+                "name": event.get("name"),
+                "worker": worker_name,
+                "hostname": event.get("hostname"),
+                "queue_name": queue_name,
+            }
+    
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_received",
+                labels=labels,
+            )
 
     def _handle_task_started(self, event):
-        task = self._get_task_from_event(event)
+        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_started",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-            },
-        )
-
-    def _handle_task_succeeded(self, event):
-        task = self._get_task_from_event(event)
-
-        hostname = event.get("hostname")
-        runtime = event.get("runtime")
-        worker_name, _ = get_worker_names(hostname)
-
-        queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
-        task_name = getattr(task, "name")
-
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_succeeded",
-            labels={
-                "name": task_name,
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-            },
-        )
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
         
-        try:
-            self._metrics.register_histogram(
-                name="task_runtime",
-                value=runtime,
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_started",
                 labels={
-                    "name": task_name,
+                    "name": getattr(task, "name"),
+                    "worker": worker_name,
                     "hostname": hostname,
                     "queue_name": queue_name,
                 },
             )
-        except Exception as e:
-            logging.error(f"error setting task_runtime metric: {e}")
+
+    def _handle_task_succeeded(self, event):
+        task: Task = self._get_task_from_event(event)
+
+        hostname = event.get("hostname")
+        queue_name = (
+            getattr(task, "queue", None)
+            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            or self._default_queue_name
+        )
+        
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
+            task_name = getattr(task, "name")
+            runtime = event.get("runtime")
+    
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_succeeded",
+                labels={
+                    "name": task_name,
+                    "worker": worker_name,
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                },
+            )
             
+            try:
+                self._metrics.register_histogram(
+                    name="task_runtime",
+                    value=runtime,
+                    labels={
+                        "name": task_name,
+                        "hostname": hostname,
+                        "queue_name": queue_name,
+                    },
+                )
+            except Exception as e:
+                logging.error(f"error setting task_runtime metric: {e}")
+                
 
     def _handle_task_failed(self, event):
-        task = self._get_task_from_event(event)
+        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
-        exception = getattr(task, "exception", None) or event.get("exception")
-        exception_name = get_exception_name(exception)
-
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_failed",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-                "exception": exception_name,
-            },
-        )
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
+            exception = getattr(task, "exception", None) or event.get("exception")
+            exception_name = get_exception_name(exception)
+    
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_failed",
+                labels={
+                    "name": getattr(task, "name"),
+                    "worker": worker_name,
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                    "exception": exception_name,
+                },
+            )
 
     def _handle_task_retried(self, event):
-        task = self._get_task_from_event(event)
+        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
-        exception = getattr(task, "exception", None) or event.get("exception")
-        exception_name = get_exception_name(exception)
-
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_retried",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-                "exception": exception_name,
-            },
-        )
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
+            exception = getattr(task, "exception", None) or event.get("exception")
+            exception_name = get_exception_name(exception)
+    
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_retried",
+                labels={
+                    "name": getattr(task, "name"),
+                    "worker": worker_name,
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                    "exception": exception_name,
+                },
+            )
 
     def _handle_task_rejected(self, event):
-        task = self._get_task_from_event(event)
+        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_rejected",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-            },
-        )
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
+        
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_rejected",
+                labels={
+                    "name": getattr(task, "name"),
+                    "worker": worker_name,
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                },
+            )
 
     def _handle_task_revoked(self, event):
-        task = self._get_task_from_event(event)
+        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
-
         queue_name = (
             getattr(task, "queue", None)
             or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
-        self._handle_task_generic(
-            event=event,
-            task=task,
-            metric_name="task_revoked",
-            labels={
-                "name": getattr(task, "name"),
-                "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-            },
-        )
+        if self._should_monitor_queue(queue_name):
+            worker_name, _ = get_worker_names(hostname)
+            
+            self._handle_task_generic(
+                event=event,
+                task=task,
+                metric_name="task_revoked",
+                labels={
+                    "name": getattr(task, "name"),
+                    "worker": worker_name,
+                    "hostname": hostname,
+                    "queue_name": queue_name,
+                },
+            )
 
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
@@ -635,7 +633,9 @@ class Roquefort:
 
                 if queue_name not in self._workers_metadata[worker_name]["queues"]:
                     self._workers_metadata[worker_name]["queues"].append(queue_name)
-
+                    
+    def _should_monitor_queue(self, queue_name: str) -> bool:
+        return self._monitored_queues is None or queue_name in self._monitored_queues
 
 async def main():
     roquefort = Roquefort(
