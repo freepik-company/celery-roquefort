@@ -197,10 +197,8 @@ def main(
 
     if queues != "all":
         queues = [queue.strip() for queue in queues.split(",")]
-        if not all(isinstance(queue, str) for queue in queues):
-            raise ValueError("Queues must be a list of strings")
-        if not queues and len(queues) == 0:
-            raise ValueError("Queues cannot be empty")
+        if any(not queue for queue in queues):
+            raise ValueError("Queue names cannot be empty")
     else:
         queues = None
 
