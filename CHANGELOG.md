@@ -1,3 +1,9 @@
+## 0.11.1 (2025-07-07)
+
+### Fix
+
+- **Roquefort**: queue length metric was not aplying queue filter (#25)
+
 ## 0.11.0 (2025-07-07)
 
 ### Feat
