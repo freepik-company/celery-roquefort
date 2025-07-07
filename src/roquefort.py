@@ -204,6 +204,9 @@ class Roquefort:
                 return
             
             for queue_name in self._queues:
+                if not self._should_monitor_queue(queue_name):
+                    continue
+                
                 length = get_queue_length(connection, transport, queue_name)
                 
                 self._metrics.set_gauge(
