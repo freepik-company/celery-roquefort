@@ -85,9 +85,17 @@ resources: {}
   #   memory: 128Mi
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
-livenessProbe: {}
+livenessProbe:
+  initialDelaySeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 5
+  periodSeconds: 30
 
-readinessProbe: {}
+readinessProbe: 
+  initialDelaySeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 5
+  periodSeconds: 30
 
 nodeSelector: {}
 
