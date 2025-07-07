@@ -5,6 +5,7 @@ import sys
 import os
 from typing import Dict, Any
 from .roquefort import Roquefort
+from test.test_subprocess import NONEXISTING_ERRORS
 
 
 def parse_custom_labels(ctx, param, value):
@@ -92,7 +93,7 @@ def parse_custom_labels(ctx, param, value):
 )
 @click.option(
     "--queues",
-    default="all",
+    default=None,
     envvar="CR_QUEUES",
     help="Queues to monitor. Env: CR_QUEUES",
 )
@@ -106,7 +107,7 @@ def main(
     custom_labels: Dict[str, Any],
     verbose: bool,
     default_queue_name: str = "unknown-queue",
-    queues: str = "all",
+    queues: str = None,
 ):
     """
     Celery Roquefort - Prometheus metrics collector for Celery tasks and workers.
@@ -128,7 +129,7 @@ def main(
     CR_CUSTOM_LABELS  - Custom labels (key=value,key2=value2 or JSON)
     CR_VERBOSE        - Enable verbose logging (set to 1)
     CR_ENV_PREFIX     - Change the environment variable prefix
-    CR_QUEUES         - Queues to be monitored by roquefort
+    CR_QUEUES         - Queues to be monitored by roquefort. Comma separated values
 
     Examples:
 
@@ -195,12 +196,10 @@ def main(
         if env_vars_used:
             click.echo(f"Using environment variables: {', '.join(env_vars_used)}")
 
-    if queues != "all":
+    if queues:
         queues = [queue.strip() for queue in queues.split(",")]
         if any(not queue for queue in queues):
             raise ValueError("Queue names cannot be empty")
-    else:
-        queues = None
 
     try:
         roquefort = Roquefort(
