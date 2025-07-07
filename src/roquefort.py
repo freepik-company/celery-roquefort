@@ -16,7 +16,7 @@ from .helpers import (
 )
 
 from .metrics.metrics import MetricService
-from .server.server import HttpServer
+from .server.server import FastAPIServer, HttpServer
 
 
 class Roquefort:
@@ -37,8 +37,11 @@ class Roquefort:
         self._metrics: MetricService = MetricService(
             metric_prefix=prefix, custom_labels=custom_labels
         )
-        self._server: HttpServer = HttpServer(
-            host=host, port=port, registry=self._metrics.get_registry()
+        self._server: HttpServer = FastAPIServer(
+            host=host, 
+            port=port, 
+            registry=self._metrics.get_registry(),
+            #lifespan_method=self.update_metrics,
         )
         self._app: Celery = None
         self._state: Celery.events.State = None
@@ -103,7 +106,7 @@ class Roquefort:
         self._metrics.create_gauge(
             "worker_tasks_active",
             "Number of tasks currently being processed by the workers.",
-            labels=["hostname", "queue_name"],
+            labels=["hostname", "worker", "queue_name"],
         )
         self._metrics.create_gauge(
             "queue_length", "Number of tasks in the queue.", labels=["queue_name"]
@@ -124,13 +127,6 @@ class Roquefort:
             "Histogram of task runtime measurements.",
             labels=["name", "hostname", "queue_name"],
         )
-
-    def _lifespan(self):
-        async def lifespan(app: FastAPI):
-            asyncio.create_task(self.update_metrics())
-            yield
-
-        return lifespan
 
     async def _purger(self):
         logging.debug("purging metrics")
@@ -185,10 +181,11 @@ class Roquefort:
         self, receiver: Receiver, loop: asyncio.AbstractEventLoop
     ):
         # Use run_in_executor to avoid blocking the event loop
-        await loop.run_in_executor(
+        loop.run_in_executor(
             None,
             lambda: receiver.capture(limit=None, timeout=None, wakeup=True),
         )
+        await asyncio.sleep(1)
 
     async def _consume_events_loop(self, handlers: dict):
         with self._app.connection() as connection:
@@ -257,7 +254,7 @@ class Roquefort:
             purge_task = asyncio.create_task(self._purger_loop())
             queue_length_task = asyncio.create_task(self._calculate_queue_length_loop())
 
-            await asyncio.wait(
+            asyncio.wait(
                 [consume_task, purge_task, queue_length_task], return_when=asyncio.FIRST_COMPLETED
             )
 
@@ -270,18 +267,18 @@ class Roquefort:
                 raise
         finally:
             logging.info("metrics collection stopped")
+        await asyncio.sleep(1)
 
     async def run(self):
         logging.info("starting Roquefort")
 
         try:
+            # Start metrics collection
+            await self.update_metrics()
             # Start HTTP server only once
             if not self._server_started:
                 await self._server.run()
                 self._server_started = True
-
-            # Start metrics collection
-            await self.update_metrics()
         except (KeyboardInterrupt, SystemExit):
             logging.info("shutdown signal received, stopping Roquefort gracefully")
             self._shutdown_event.set()
@@ -637,16 +634,3 @@ class Roquefort:
                     
     def _should_monitor_queue(self, queue_name: str) -> bool:
         return self._monitored_queues is None or queue_name in self._monitored_queues
-
-async def main():
-    roquefort = Roquefort(
-        broker_url="redis://localhost:6379/0",
-        host="0.0.0.0",
-        port=8001,
-        custom_labels={"who_you_gonna_call": "ghostbusters"},
-    )
-    await roquefort.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
