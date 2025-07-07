@@ -69,6 +69,13 @@ class MetricService:
             labelnames=labels,
             registry=self._registry,
         )
+        
+    def register_histogram(self, name: str, value: Union[int, float], labels: dict = None):
+        labels = labels or {}
+        if name not in self.histograms:
+            logging.warning(f"histogram {name} not found. skipping")
+            return
+        self.histograms[name].labels(**labels, **self._custom_labels).observe(value)
 
     def get_registry(self):
         return self._registry
