@@ -69,7 +69,7 @@ class FastAPIServer(HttpServer):
         status_code = 200
         
         if not self._health_check_method:
-            return JSONResponse(content={"status": status})
+            return JSONResponse(content={"status": status}, status_code=status_code)
         
         try:
             await self._health_check_method()
