@@ -5,7 +5,6 @@ import sys
 import os
 from typing import Dict, Any
 from .roquefort import Roquefort
-from test.test_subprocess import NONEXISTING_ERRORS
 
 
 def parse_custom_labels(ctx, param, value):
