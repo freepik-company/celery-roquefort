@@ -49,9 +49,23 @@ class FastAPIServer(HttpServer):
     async def run(self):
         @asynccontextmanager
         async def lifespan(app: FastAPI):
-            logging.info("Starting FastAPI server")
-            yield
-            logging.info("Shutting down FastAPI server")
+            logging.info("Starting FastAPI server lifespan")
+            
+            # Start the lifespan method if provided
+            lifespan_task = None
+            if self._lifespan_method:
+                lifespan_task = asyncio.create_task(self._lifespan_method())
+            
+            try:
+                yield
+            finally:
+                logging.info("Shutting down FastAPI server lifespan")
+                if lifespan_task and not lifespan_task.done():
+                    lifespan_task.cancel()
+                    try:
+                        await lifespan_task
+                    except asyncio.CancelledError:
+                        pass
             
         logging.info(f"Starting FastAPI server on {self._host}:{self._port}")
         
