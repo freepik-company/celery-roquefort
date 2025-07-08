@@ -1,3 +1,9 @@
+## 0.11.5 (2025-07-08)
+
+### Fix
+
+- handle empty exception after some time running (#28)
+
 ## 0.11.4 (2025-07-08)
 
 ### Refactor
