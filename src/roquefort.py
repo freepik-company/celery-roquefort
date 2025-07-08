@@ -180,6 +180,7 @@ class Roquefort:
     async def _consume_events(
         self, receiver: Receiver, loop: asyncio.AbstractEventLoop
     ):
+        logging.debug("consuming events")
         # Use run_in_executor to avoid blocking the event loop
         loop.run_in_executor(
             None,
@@ -188,11 +189,19 @@ class Roquefort:
         await asyncio.sleep(1)
 
     async def _consume_events_loop(self, handlers: dict):
+        logging.debug("consuming events loop")
+        is_consuming = False
         with self._app.connection() as connection:
-            recv = self._app.events.Receiver(connection, handlers=handlers)
             loop = asyncio.get_event_loop()
             while not self._shutdown_event.is_set():
-                await self._consume_events(recv, loop)
+                try:
+                    if not is_consuming:
+                        recv = self._app.events.Receiver(connection, handlers=handlers)
+                        await self._consume_events(recv, loop)
+                        is_consuming = True
+                except Exception as e:
+                    logging.error(f"error consuming events: {e}")
+                    is_consuming = False
                 await asyncio.sleep(1)
                 
     async def _calculate_queue_length(self):

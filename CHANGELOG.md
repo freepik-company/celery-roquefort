@@ -1,3 +1,10 @@
+## 0.11.2 (2025-07-07)
+
+### Fix
+
+- **Roquefort**: change logging level for event consumption to debug
+- **Roquefort**: improve event consumption error handling and logging
+
 ## 0.11.1 (2025-07-07)
 
 ### Fix
