@@ -17,6 +17,7 @@ from .helpers import (
 
 from .metrics.metrics import MetricService
 from .server.server import FastAPIServer, HttpServer
+from .thread_manager import ThreadManager
 
 
 class Roquefort:
@@ -37,16 +38,10 @@ class Roquefort:
         self._metrics: MetricService = MetricService(
             metric_prefix=prefix, custom_labels=custom_labels
         )
-        self._server: HttpServer = FastAPIServer(
-            host=host, 
-            port=port, 
-            registry=self._metrics.get_registry(),
-            #lifespan_method=self.update_metrics,
-        )
+        self._server: HttpServer = None
         self._app: Celery = None
         self._state: Celery.events.State = None
-        self._shutdown_event = asyncio.Event()
-        self._server_started = False
+        self._thread_manager = ThreadManager()
         self._workers_metadata = {}
         self._tracked_events = []
         self._default_queue_name = default_queue_name
@@ -54,6 +49,8 @@ class Roquefort:
         self._queue_length_interval = queue_length_interval
         self._queues = []
         self._monitored_queues = queues
+        self._host = host
+        self._port = port
 
         # Create metrics
         #   Counters
@@ -128,7 +125,8 @@ class Roquefort:
             labels=["name", "hostname", "queue_name"],
         )
 
-    async def _purger(self):
+    def _purger(self):
+        """Purge metrics for inactive workers."""
         logging.debug("purging metrics")
         workers_to_remove = []
 
@@ -172,131 +170,157 @@ class Roquefort:
         for worker in workers_to_remove:
             del self._workers_metadata[worker]
 
-    async def _purger_loop(self):
-        while not self._shutdown_event.is_set():
-            await self._purger()
-            await asyncio.sleep(self._worker_heartbeat_timeout)
+    def _purger_loop(self):
+        """Loop for purging metrics."""
+        while not self._thread_manager.shutdown_event.is_set():
+            self._purger()
+            time.sleep(self._worker_heartbeat_timeout)
 
-    async def _consume_events(
-        self, receiver: Receiver, loop: asyncio.AbstractEventLoop
-    ):
-        logging.debug("consuming events")
-        # Use run_in_executor to avoid blocking the event loop
-        loop.run_in_executor(
-            None,
-            lambda: receiver.capture(limit=None, timeout=None, wakeup=True),
-        )
-        await asyncio.sleep(1)
+    def _calculate_queue_length(self):
+        """Calculate queue length for monitored queues."""
+        try:
+            with self._app.connection() as connection:
+                transport = connection.info().get("transport")
+                
+                if not is_valid_transport(transport):
+                    logging.info(f"invalid transport {transport} detected. skipping queue length calculation")
+                    return
+                
+                for queue_name in self._queues:
+                    if not self._should_monitor_queue(queue_name):
+                        continue
+                    
+                    length = get_queue_length(connection, transport, queue_name)
+                    
+                    self._metrics.set_gauge(
+                        name="queue_length",
+                        value=length,
+                        labels={"queue_name": queue_name},
+                    )
+        except Exception as e:
+            logging.error(f"Error calculating queue length: {e}")
 
-    async def _consume_events_loop(self, handlers: dict):
-        logging.debug("consuming events loop")
-        is_consuming = False
-        with self._app.connection() as connection:
-            loop = asyncio.get_event_loop()
-            while not self._shutdown_event.is_set():
-                try:
-                    if not is_consuming:
-                        recv = self._app.events.Receiver(connection, handlers=handlers)
-                        await self._consume_events(recv, loop)
-                        is_consuming = True
-                except Exception as e:
-                    logging.error(f"error consuming events: {e}")
-                    is_consuming = False
-                await asyncio.sleep(1)
-                
-    async def _calculate_queue_length(self):
-        with self._app.connection() as connection:
-            transport = connection.info().get("transport")
-            
-            if not is_valid_transport(transport):
-                logging.info(f"invalid transport {transport} detected. skipping queue length calculation")
-                return
-            
-            for queue_name in self._queues:
-                if not self._should_monitor_queue(queue_name):
-                    continue
-                
-                length = get_queue_length(connection, transport, queue_name)
-                
-                self._metrics.set_gauge(
-                    name="queue_length",
-                    value=length,
-                    labels={"queue_name": queue_name},
-                )
-    
-    async def _calculate_queue_length_loop(self):
-        while not self._shutdown_event.is_set():
-            await self._calculate_queue_length()
-            await asyncio.sleep(self._queue_length_interval)
+    def _calculate_queue_length_loop(self):
+        """Loop for calculating queue length."""
+        while not self._thread_manager.shutdown_event.is_set():
+            self._calculate_queue_length()
+            time.sleep(self._queue_length_interval)
 
-    async def update_metrics(self):
-        """
-        Update metrics for the current state of the system.
-        
-        This method is responsible for:
-        - Consuming events from the broker
-        - Purging metrics for inactive workers
-        - Calculating queue length for all queues
-        """
+    def start_metrics_collection(self):
+        """Start metrics collection with unified threading."""
         logging.info("starting metrics collection")
+        
+        # Initialize Celery app
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
         
-        handlers = {
-            "task-sent": self._handle_task_sent,
-            "task-received": self._handle_task_received,
-            "task-started": self._handle_task_started,
-            "task-succeeded": self._handle_task_succeeded,
-            "task-failed": self._handle_task_failed,
-            "task-retried": self._handle_task_retried,
-            "task-rejected": self._handle_task_rejected,
-            "task-revoked": self._handle_task_revoked,
-            "worker-heartbeat": self._handle_worker_heartbeat,
-            "worker-online": self._handle_worker_status,
-            "worker-offline": self._handle_worker_status,
-        }
+        # Track events
+        self._tracked_events = [
+            "task-sent", "task-received", "task-started", "task-succeeded", 
+            "task-failed", "task-retried", "task-rejected", "task-revoked",
+            "worker-heartbeat", "worker-online", "worker-offline"
+        ]
 
-        self._tracked_events = list(handlers.keys())
-
-        # Load queue info
+        # Load worker metadata
         self._load_worker_metadata()
 
+        # Register all event handlers with the unified thread manager
+        self._thread_manager.register_event_handler("task-sent", self._handle_task_sent)
+        self._thread_manager.register_event_handler("task-received", self._handle_task_received)
+        self._thread_manager.register_event_handler("task-started", self._handle_task_started)
+        self._thread_manager.register_event_handler("task-succeeded", self._handle_task_succeeded)
+        self._thread_manager.register_event_handler("task-failed", self._handle_task_failed)
+        self._thread_manager.register_event_handler("task-retried", self._handle_task_retried)
+        self._thread_manager.register_event_handler("task-rejected", self._handle_task_rejected)
+        self._thread_manager.register_event_handler("task-revoked", self._handle_task_revoked)
+        self._thread_manager.register_event_handler("worker-heartbeat", self._handle_worker_heartbeat)
+        self._thread_manager.register_event_handler("worker-online", self._handle_worker_status)
+        self._thread_manager.register_event_handler("worker-offline", self._handle_worker_status)
+
+        # Start event consumer thread
+        self._thread_manager.start_event_consumer_thread(self)
+
+        # Start the unified event handler thread
+        self._thread_manager.start_unified_event_handler_thread()
+
+        # Start background threads (these remain separate as they're different operations)
+        self._thread_manager.start_background_thread("purger", self._purger_loop)
+        self._thread_manager.start_background_thread("queue-length", self._calculate_queue_length_loop)
+
+        # Mark initialization as complete
+        self._thread_manager.mark_initialization_complete()
+
+        logging.info("metrics collection started with unified threading")
+
+    def stop_metrics_collection(self):
+        """Stop metrics collection."""
+        logging.info("stopping metrics collection")
+        self._thread_manager.shutdown()
+        logging.info("metrics collection stopped")
+
+    def create_fastapi_server(self):
+        """Create FastAPI server with lifespan integration."""
+        self._server = FastAPIServer(
+            host=self._host,
+            port=self._port,
+            registry=self._metrics.get_registry(),
+            lifespan_method=self._lifespan_handler,
+            health_check_method=self._health_check,
+        )
+        return self._server
+
+    async def _lifespan_handler(self):
+        """Lifespan handler for FastAPI server."""
+        logging.info("Starting Roquefort lifespan")
+        
+        # Start metrics collection synchronously
         try:
-            consume_task = asyncio.create_task(self._consume_events_loop(handlers))
-            purge_task = asyncio.create_task(self._purger_loop())
-            queue_length_task = asyncio.create_task(self._calculate_queue_length_loop())
-
-            asyncio.wait(
-                [consume_task, purge_task, queue_length_task], return_when=asyncio.FIRST_COMPLETED
-            )
-
-        except (KeyboardInterrupt, SystemExit):
-            logging.info("Shutdown signal received, stopping metrics collection")
-            self._shutdown_event.set()
+            self.start_metrics_collection()
+            
+            # Wait for initialization to complete
+            if not self._thread_manager.wait_for_initialization(timeout=10):
+                raise Exception("Thread manager initialization timed out")
+                
+            logging.info("All threads initialized successfully")
+            
+            # Keep running until shutdown
+            while True:
+                if not self._thread_manager.is_running():
+                    logging.warning("Thread manager stopped unexpectedly")
+                    break
+                await asyncio.sleep(1)
+                
         except Exception as e:
-            if not self._shutdown_event.is_set():
-                logging.exception(f"Fatal error in update_metrics: {e}")
-                raise
+            logging.error(f"Error in lifespan handler: {e}")
         finally:
-            logging.info("metrics collection stopped")
-        await asyncio.sleep(1)
+            logging.info("Stopping Roquefort lifespan")
+            self.stop_metrics_collection()
+
+    async def _health_check(self):
+        """Health check method for FastAPI server."""
+        if not self._thread_manager.is_running():
+            raise Exception("Thread manager is not running")
+        
+        # Check if Celery connection is working
+        try:
+            with self._app.connection() as connection:
+                connection.ensure_connection()
+        except Exception as e:
+            raise Exception(f"Celery connection failed: {e}")
 
     async def run(self):
+        """Run the Roquefort server."""
         logging.info("starting Roquefort")
-
+        
         try:
-            # Start metrics collection
-            await self.update_metrics()
-            # Start HTTP server only once
-            if not self._server_started:
-                await self._server.run()
-                self._server_started = True
+            server = self.create_fastapi_server()
+            await server.run()
         except (KeyboardInterrupt, SystemExit):
             logging.info("shutdown signal received, stopping Roquefort gracefully")
-            self._shutdown_event.set()
+            self.stop_metrics_collection()
         except Exception as e:
             logging.exception(f"fatal error in run: {e}")
-            self._shutdown_event.set()
+            self.stop_metrics_collection()
             raise
         finally:
             logging.info("Roquefort stopped")
@@ -316,7 +340,7 @@ class Roquefort:
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
-            logging.error(f"error setting {metric_name} metric: {e}")
+            logging.exception(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
         task: Task = self._get_task_from_event(event)
@@ -434,7 +458,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting task_runtime metric: {e}")
+            logging.exception(f"error setting task_runtime metric: {e}")
                 
 
     def _handle_task_failed(self, event):
@@ -583,7 +607,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting worker_active metric: {e}")
+            logging.exception(f"error setting worker_active metric: {e}")
 
         active_tasks = event.get("active", 0)
         
@@ -598,7 +622,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting worker_tasks_active metric: {e}")
+            logging.exception(f"error setting worker_tasks_active metric: {e}")
         
         
         # todo: add metrics handling for processed tasks.
@@ -626,15 +650,18 @@ class Roquefort:
         if event_type == "worker-online":
             value = 1
 
-        self._metrics.set_gauge(
-            name="worker_active",
-            value=value,
-            labels={
-                "hostname": hostname,
-                "worker": worker_name,
-                "queue_name": queue_name,
-            },
-        )
+        try:
+            self._metrics.set_gauge(
+                name="worker_active",
+                value=value,
+                labels={
+                    "hostname": hostname,
+                    "worker": worker_name,
+                    "queue_name": queue_name,
+                },
+            )
+        except Exception as e:
+            logging.exception(f"error setting worker_active metric in worker status handler: {e}")
 
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
@@ -646,23 +673,26 @@ class Roquefort:
 
         destination = [hostname] if hostname else None 
 
-        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+        try:
+            queues = self._app.control.inspect(destination=destination).active_queues() or {}
 
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+            for worker_name, queue_info_list in queues.items():
+                if worker_name not in self._workers_metadata:
+                    self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
 
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
+                for queue_info in queue_info_list:
+                    queue_name = queue_info.get("name")
 
-                if not queue_name:
-                    continue
-                
-                if queue_name not in self._queues:
-                    self._queues.append(queue_name)
+                    if not queue_name:
+                        continue
+                    
+                    if queue_name not in self._queues:
+                        self._queues.append(queue_name)
 
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
+                    if queue_name not in self._workers_metadata[worker_name]["queues"]:
+                        self._workers_metadata[worker_name]["queues"].append(queue_name)
+        except Exception as e:
+            logging.exception(f"error loading worker metadata for hostname {hostname}: {e}")
                     
     def _should_monitor_queue(self, queue_name: str) -> bool:
         return self._monitored_queues is None or queue_name in self._monitored_queues
