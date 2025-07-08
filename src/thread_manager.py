@@ -100,7 +100,7 @@ class ThreadManager:
                 try:
                     with roquefort_instance._app.connection() as connection:
                         recv = roquefort_instance._app.events.Receiver(connection, handlers=handlers)
-                        recv.capture(limit=None, timeout=1.0, wakeup=True)
+                        recv.capture(limit=None, timeout=None,wakeup=True)
                 except Exception as e:
                     logging.exception(f"Error in event consumer - Connection or receiver failed: {e}")
                     time.sleep(1)
