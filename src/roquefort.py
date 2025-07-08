@@ -207,7 +207,7 @@ class Roquefort:
             time.sleep(self._queue_length_interval)
 
     def start_metrics_collection(self):
-        """Start metrics collection with threading."""
+        """Start metrics collection with unified threading."""
         logging.info("starting metrics collection")
         
         # Initialize Celery app
@@ -224,35 +224,33 @@ class Roquefort:
         # Load worker metadata
         self._load_worker_metadata()
 
+        # Register all event handlers with the unified thread manager
+        self._thread_manager.register_event_handler("task-sent", self._handle_task_sent)
+        self._thread_manager.register_event_handler("task-received", self._handle_task_received)
+        self._thread_manager.register_event_handler("task-started", self._handle_task_started)
+        self._thread_manager.register_event_handler("task-succeeded", self._handle_task_succeeded)
+        self._thread_manager.register_event_handler("task-failed", self._handle_task_failed)
+        self._thread_manager.register_event_handler("task-retried", self._handle_task_retried)
+        self._thread_manager.register_event_handler("task-rejected", self._handle_task_rejected)
+        self._thread_manager.register_event_handler("task-revoked", self._handle_task_revoked)
+        self._thread_manager.register_event_handler("worker-heartbeat", self._handle_worker_heartbeat)
+        self._thread_manager.register_event_handler("worker-online", self._handle_worker_status)
+        self._thread_manager.register_event_handler("worker-offline", self._handle_worker_status)
+
         # Start event consumer thread
         self._thread_manager.start_event_consumer_thread(self)
 
-        # Start event handler threads
-        handler_mapping = {
-            "task-sent": self._handle_task_sent,
-            "task-received": self._handle_task_received,
-            "task-started": self._handle_task_started,
-            "task-succeeded": self._handle_task_succeeded,
-            "task-failed": self._handle_task_failed,
-            "task-retried": self._handle_task_retried,
-            "task-rejected": self._handle_task_rejected,
-            "task-revoked": self._handle_task_revoked,
-            "worker-heartbeat": self._handle_worker_heartbeat,
-            "worker-online": self._handle_worker_status,
-            "worker-offline": self._handle_worker_status,
-        }
+        # Start the unified event handler thread
+        self._thread_manager.start_unified_event_handler_thread()
 
-        for event_type, handler_func in handler_mapping.items():
-            self._thread_manager.start_event_handler_thread(event_type, handler_func, self)
-
-        # Start background threads
+        # Start background threads (these remain separate as they're different operations)
         self._thread_manager.start_background_thread("purger", self._purger_loop)
         self._thread_manager.start_background_thread("queue-length", self._calculate_queue_length_loop)
 
         # Mark initialization as complete
         self._thread_manager.mark_initialization_complete()
 
-        logging.info("metrics collection started")
+        logging.info("metrics collection started with unified threading")
 
     def stop_metrics_collection(self):
         """Stop metrics collection."""
