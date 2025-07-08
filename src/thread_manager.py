@@ -35,14 +35,18 @@ class ThreadManager:
                         
                     # Get event type and find appropriate handler
                     event_type = event.get("type")
+                    logging.debug(f"Processing event type: {event_type}, event: {event}")
+                    
                     if event_type in self.event_handlers:
                         try:
                             handler_func = self.event_handlers[event_type]
+                            logging.debug(f"Calling handler for {event_type}")
                             handler_func(event)
                         except Exception as e:
                             logging.exception(f"Error in {event_type} handler: {e}")
                     else:
                         logging.warning(f"No handler registered for event type: {event_type}")
+                        logging.debug(f"Available handlers: {list(self.event_handlers.keys())}")
                         
                     self.event_queue.task_done()
                 except Exception as e:
@@ -78,6 +82,7 @@ class ThreadManager:
             def distribute_event(event):
                 """Distribute event to the unified event queue."""
                 try:
+                    logging.debug(f"Distributing event: {event}")
                     self.event_queue.put(event)
                 except Exception as e:
                     logging.exception(f"Error distributing event {event}: {e}")
@@ -100,7 +105,25 @@ class ThreadManager:
                 try:
                     with roquefort_instance._app.connection() as connection:
                         recv = roquefort_instance._app.events.Receiver(connection, handlers=handlers)
-                        recv.capture(limit=None, timeout=1.0, wakeup=True)
+                        
+                        # Use timeout=None with proper error handling to avoid blocking
+                        # the entire thread manager
+                        while not self.shutdown_event.is_set():
+                            try:
+                                recv.capture(limit=None, timeout=None, wakeup=True)
+                                # If capture returns normally, break to check shutdown
+                                break
+                            except KeyboardInterrupt:
+                                logging.info("Event capture interrupted by KeyboardInterrupt")
+                                break
+                            except Exception as capture_e:
+                                logging.debug(f"Event capture exception: {capture_e}")
+                                # For any other exception, check if we should shutdown
+                                if self.shutdown_event.is_set():
+                                    break
+                                # Continue capturing if not shutting down
+                                continue
+                        
                 except Exception as e:
                     logging.exception(f"Error in event consumer - Connection or receiver failed: {e}")
                     time.sleep(1)
