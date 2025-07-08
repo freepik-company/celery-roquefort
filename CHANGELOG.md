@@ -1,3 +1,9 @@
+## 0.11.4 (2025-07-08)
+
+### Refactor
+
+- run process into threads (#27)
+
 ## 0.11.3 (2025-07-08)
 
 ### Fix
