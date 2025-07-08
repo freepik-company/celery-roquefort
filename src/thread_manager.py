@@ -33,11 +33,11 @@ class ThreadManager:
                     try:
                         handler_func(event)
                     except Exception as e:
-                        logging.error(f"Error in {event_type} handler: {e}")
+                        logging.exception(f"Error in {event_type} handler: {e}")
                         
                     self.event_queues[event_type].task_done()
                 except Exception as e:
-                    logging.error(f"Error in event handler thread for {event_type}: {e}")
+                    logging.exception(f"Error in event handler thread for {event_type}: {e}")
                     
         thread = threading.Thread(target=event_handler_worker, name=f"handler-{event_type}")
         thread.daemon = True
@@ -53,7 +53,7 @@ class ThreadManager:
                 try:
                     target_func(*args, **kwargs)
                 except Exception as e:
-                    logging.error(f"Error in background thread {name}: {e}")
+                    logging.exception(f"Error in background thread {name}: {e}")
                     
         thread = threading.Thread(target=background_worker, name=name)
         thread.daemon = True
@@ -68,11 +68,14 @@ class ThreadManager:
             
             def distribute_event(event):
                 """Distribute event to the appropriate handler queue."""
-                event_type = event.get("type")
-                if event_type in self.event_queues:
-                    self.event_queues[event_type].put(event)
-                else:
-                    logging.warning(f"No handler queue for event type: {event_type}")
+                try:
+                    event_type = event.get("type")
+                    if event_type in self.event_queues:
+                        self.event_queues[event_type].put(event)
+                    else:
+                        logging.warning(f"No handler queue for event type: {event_type}")
+                except Exception as e:
+                    logging.exception(f"Error distributing event {event}: {e}")
             
             handlers = {
                 "task-sent": distribute_event,
@@ -94,7 +97,7 @@ class ThreadManager:
                         recv = roquefort_instance._app.events.Receiver(connection, handlers=handlers)
                         recv.capture(limit=None, timeout=1.0, wakeup=True)
                 except Exception as e:
-                    logging.error(f"Error in event consumer: {e}")
+                    logging.exception(f"Error in event consumer - Connection or receiver failed: {e}")
                     time.sleep(1)
                     
         thread = threading.Thread(target=event_consumer_worker, name="event-consumer")
@@ -123,9 +126,12 @@ class ThreadManager:
         for name, thread in self.threads.items():
             if thread.is_alive():
                 logging.debug(f"Waiting for thread {name} to finish")
-                thread.join(timeout=5.0)
-                if thread.is_alive():
-                    logging.warning(f"Thread {name} did not finish gracefully")
+                try:
+                    thread.join(timeout=5.0)
+                    if thread.is_alive():
+                        logging.warning(f"Thread {name} did not finish gracefully")
+                except Exception as e:
+                    logging.exception(f"Error while shutting down thread {name}: {e}")
                     
         self.threads.clear()
         self.event_queues.clear()
