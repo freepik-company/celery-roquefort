@@ -342,7 +342,7 @@ class Roquefort:
         try:
             self._metrics.increment_counter(name=metric_name, labels=labels)
         except Exception as e:
-            logging.error(f"error setting {metric_name} metric: {e}")
+            logging.exception(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
         task: Task = self._get_task_from_event(event)
@@ -460,7 +460,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting task_runtime metric: {e}")
+            logging.exception(f"error setting task_runtime metric: {e}")
                 
 
     def _handle_task_failed(self, event):
@@ -609,7 +609,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting worker_active metric: {e}")
+            logging.exception(f"error setting worker_active metric: {e}")
 
         active_tasks = event.get("active", 0)
         
@@ -624,7 +624,7 @@ class Roquefort:
                 },
             )
         except Exception as e:
-            logging.error(f"error setting worker_tasks_active metric: {e}")
+            logging.exception(f"error setting worker_tasks_active metric: {e}")
         
         
         # todo: add metrics handling for processed tasks.
@@ -652,15 +652,18 @@ class Roquefort:
         if event_type == "worker-online":
             value = 1
 
-        self._metrics.set_gauge(
-            name="worker_active",
-            value=value,
-            labels={
-                "hostname": hostname,
-                "worker": worker_name,
-                "queue_name": queue_name,
-            },
-        )
+        try:
+            self._metrics.set_gauge(
+                name="worker_active",
+                value=value,
+                labels={
+                    "hostname": hostname,
+                    "worker": worker_name,
+                    "queue_name": queue_name,
+                },
+            )
+        except Exception as e:
+            logging.exception(f"error setting worker_active metric in worker status handler: {e}")
 
     def _get_task_from_event(self, event) -> Task:
         self._state.event(event)
@@ -672,23 +675,26 @@ class Roquefort:
 
         destination = [hostname] if hostname else None 
 
-        queues = self._app.control.inspect(destination=destination).active_queues() or {}
+        try:
+            queues = self._app.control.inspect(destination=destination).active_queues() or {}
 
-        for worker_name, queue_info_list in queues.items():
-            if worker_name not in self._workers_metadata:
-                self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
+            for worker_name, queue_info_list in queues.items():
+                if worker_name not in self._workers_metadata:
+                    self._workers_metadata[worker_name] = {"queues": [], "last_heartbeat": time.time()}
 
-            for queue_info in queue_info_list:
-                queue_name = queue_info.get("name")
+                for queue_info in queue_info_list:
+                    queue_name = queue_info.get("name")
 
-                if not queue_name:
-                    continue
-                
-                if queue_name not in self._queues:
-                    self._queues.append(queue_name)
+                    if not queue_name:
+                        continue
+                    
+                    if queue_name not in self._queues:
+                        self._queues.append(queue_name)
 
-                if queue_name not in self._workers_metadata[worker_name]["queues"]:
-                    self._workers_metadata[worker_name]["queues"].append(queue_name)
+                    if queue_name not in self._workers_metadata[worker_name]["queues"]:
+                        self._workers_metadata[worker_name]["queues"].append(queue_name)
+        except Exception as e:
+            logging.exception(f"error loading worker metadata for hostname {hostname}: {e}")
                     
     def _should_monitor_queue(self, queue_name: str) -> bool:
         return self._monitored_queues is None or queue_name in self._monitored_queues
