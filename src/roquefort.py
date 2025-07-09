@@ -51,6 +51,7 @@ class Roquefort:
         self._monitored_queues = queues
         self._host = host
         self._port = port
+        self._last_event_timestamp = None
 
         # Create metrics
         #   Counters
@@ -128,9 +129,8 @@ class Roquefort:
     def _purger(self):
         """Purge metrics for inactive workers."""
         logging.debug("purging metrics")
-        workers_to_remove = []
 
-        for worker, metadata in self._workers_metadata.items():
+        for worker, metadata in list(self._workers_metadata.items()):
             hostname = worker
             worker_name, _ = get_worker_names(hostname)
             queue_name = (
@@ -148,7 +148,43 @@ class Roquefort:
                     name="worker_active",
                     value=hostname,
                 )
-                workers_to_remove.append(worker)
+                self._metrics.remove_gauge_by_label_value(
+                    name="worker_tasks_active",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_sent",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_received",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_started",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_succeeded",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_failed",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_retried",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_rejected",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_revoked",
+                    value=hostname,
+                )
+                del self._workers_metadata[worker]
                 continue
 
             if (
@@ -166,9 +202,6 @@ class Roquefort:
                     },
                 )
                 continue
-
-        for worker in workers_to_remove:
-            del self._workers_metadata[worker]
 
     def _purger_loop(self):
         """Loop for purging metrics."""
@@ -209,6 +242,9 @@ class Roquefort:
     def start_metrics_collection(self):
         """Start metrics collection with unified threading."""
         logging.info("starting metrics collection")
+        
+        # Track startup time for health check
+        self._startup_time = time.time()
         
         # Initialize Celery app
         self._app = Celery(broker=self._broker_url)
@@ -307,6 +343,18 @@ class Roquefort:
                 connection.ensure_connection()
         except Exception as e:
             raise Exception(f"Celery connection failed: {e}")
+        
+        # Check if events are being received regularly
+        if self._last_event_timestamp is not None:
+            time_since_last_event = time.time() - self._last_event_timestamp
+            if time_since_last_event > 60:
+                raise Exception(f"No events received for {time_since_last_event:.1f} seconds (threshold: 60 seconds)")
+        else:
+            # If no events have been received yet, check how long since startup
+            # Allow some time for initialization
+            startup_time = time.time() - getattr(self, '_startup_time', 0)
+            if startup_time > 120:  # Allow 2 minutes for first event after startup
+                raise Exception("No events received since startup")
 
     async def run(self):
         """Run the Roquefort server."""
@@ -331,6 +379,9 @@ class Roquefort:
         event_type = event.get("type")
 
         logging.debug(f"event of type {event_type} received")
+
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
 
         if event_type not in self._tracked_events:
             logging.warning(
@@ -578,6 +629,9 @@ class Roquefort:
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
+
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
 
@@ -633,6 +687,9 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         logging.debug(f"received event {event_type} for worker {hostname}")
+
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
 
         if event_type == "worker-online" and hostname not in self._workers_metadata:
             self._load_worker_metadata(hostname)
