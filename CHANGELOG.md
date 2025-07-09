@@ -1,3 +1,9 @@
+## 0.12.1 (2025-07-09)
+
+### Fix
+
+- reconnect on kombu requeueing warnings (#31)
+
 ## 0.12.0 (2025-07-09)
 
 ### Feat
