@@ -51,6 +51,7 @@ class Roquefort:
         self._monitored_queues = queues
         self._host = host
         self._port = port
+        self._last_event_timestamp = None
 
         # Create metrics
         #   Counters
@@ -242,6 +243,9 @@ class Roquefort:
         """Start metrics collection with unified threading."""
         logging.info("starting metrics collection")
         
+        # Track startup time for health check
+        self._startup_time = time.time()
+        
         # Initialize Celery app
         self._app = Celery(broker=self._broker_url)
         self._state = self._app.events.State()
@@ -339,6 +343,18 @@ class Roquefort:
                 connection.ensure_connection()
         except Exception as e:
             raise Exception(f"Celery connection failed: {e}")
+        
+        # Check if events are being received regularly
+        if self._last_event_timestamp is not None:
+            time_since_last_event = time.time() - self._last_event_timestamp
+            if time_since_last_event > 60:
+                raise Exception(f"No events received for {time_since_last_event:.1f} seconds (threshold: 60 seconds)")
+        else:
+            # If no events have been received yet, check how long since startup
+            # Allow some time for initialization
+            startup_time = time.time() - getattr(self, '_startup_time', 0)
+            if startup_time > 120:  # Allow 2 minutes for first event after startup
+                raise Exception("No events received since startup")
 
     async def run(self):
         """Run the Roquefort server."""
@@ -363,6 +379,9 @@ class Roquefort:
         event_type = event.get("type")
 
         logging.debug(f"event of type {event_type} received")
+
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
 
         if event_type not in self._tracked_events:
             logging.warning(
@@ -610,6 +629,9 @@ class Roquefort:
     def _handle_worker_heartbeat(self, event):
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
+
         hostname = event.get("hostname")
         worker_name, _ = get_worker_names(hostname)
 
@@ -665,6 +687,9 @@ class Roquefort:
         worker_name, _ = get_worker_names(hostname)
 
         logging.debug(f"received event {event_type} for worker {hostname}")
+
+        # Update last event timestamp
+        self._last_event_timestamp = time.time()
 
         if event_type == "worker-online" and hostname not in self._workers_metadata:
             self._load_worker_metadata(hostname)
