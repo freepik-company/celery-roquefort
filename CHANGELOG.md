@@ -1,3 +1,9 @@
+## 0.13.0 (2025-07-09)
+
+### Feat
+
+- **Roquefort**: remove hostname label from metrics counters (#32)
+
 ## 0.12.1 (2025-07-09)
 
 ### Fix
