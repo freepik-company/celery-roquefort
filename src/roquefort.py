@@ -147,6 +147,42 @@ class Roquefort:
                     name="worker_active",
                     value=hostname,
                 )
+                self._metrics.remove_gauge_by_label_value(
+                    name="worker_tasks_active",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_sent",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_received",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_started",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_succeeded",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_failed",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_retried",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_rejected",
+                    value=hostname,
+                )
+                self._metrics.remove_counter_by_label_value(
+                    name="task_revoked",
+                    value=hostname,
+                )
                 del self._workers_metadata[worker]
                 continue
 
