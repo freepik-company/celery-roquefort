@@ -128,9 +128,8 @@ class Roquefort:
     def _purger(self):
         """Purge metrics for inactive workers."""
         logging.debug("purging metrics")
-        workers_to_remove = []
 
-        for worker, metadata in self._workers_metadata.items():
+        for worker, metadata in list(self._workers_metadata.items()):
             hostname = worker
             worker_name, _ = get_worker_names(hostname)
             queue_name = (
@@ -148,7 +147,7 @@ class Roquefort:
                     name="worker_active",
                     value=hostname,
                 )
-                workers_to_remove.append(worker)
+                del self._workers_metadata[worker]
                 continue
 
             if (
@@ -166,9 +165,6 @@ class Roquefort:
                     },
                 )
                 continue
-
-        for worker in workers_to_remove:
-            del self._workers_metadata[worker]
 
     def _purger_loop(self):
         """Loop for purging metrics."""
