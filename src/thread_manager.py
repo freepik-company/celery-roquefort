@@ -98,12 +98,16 @@ class ThreadManager:
             
             while not self.shutdown_event.is_set():
                 try:
+                    # Simple approach: recreate the whole receiver when it fails
                     with roquefort_instance._app.connection() as connection:
                         recv = roquefort_instance._app.events.Receiver(connection, handlers=handlers)
-                        recv.capture(limit=None, timeout=None,wakeup=True)
+                        recv.capture(limit=None, timeout=1.0, wakeup=True)
                 except Exception as e:
-                    logging.exception(f"Error in event consumer - Connection or receiver failed: {e}")
+                    # Any error including kombu warnings will cause recreation
+                    logging.warning(f"event receiver disconnected, recreating: {e} - {type(e)}")
                     time.sleep(1)
+                    
+            logging.info("Event consumer thread stopped")
                     
         thread = threading.Thread(target=event_consumer_worker, name="event-consumer")
         thread.daemon = True
