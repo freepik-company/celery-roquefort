@@ -1,3 +1,9 @@
+## 0.12.0 (2025-07-09)
+
+### Feat
+
+- purge metrics involved in hostname lost (#29)
+
 ## 0.11.5 (2025-07-08)
 
 ### Fix
