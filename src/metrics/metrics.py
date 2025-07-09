@@ -80,15 +80,26 @@ class MetricService:
     def get_registry(self):
         return self._registry
 
-    def remove_gauge_by_label_value(self, name: str, value: str):
-        gauge = self.gauges.get(name)
+    def _remove_metric_by_label_value(self, metrics_dict: dict, metric_type: str, name: str, value: str):
+        """Private method to remove metrics by label value from any metric type collection."""
+        metric = metrics_dict.get(name)
 
-        if not gauge:
-            logging.info(f"gauge {name} not found. skipping")
+        if not metric:
+            logging.info(f"{metric_type} {name} not found. skipping")
             return
-        labels = list(gauge._metrics.keys())
+        
+        labels = list(metric._metrics.keys())
 
         for label_list in list(labels):
             if value in label_list:
-                logging.info(f"removing label {label_list} for gauge {name}")
-                gauge.remove(*label_list)
+                logging.info(f"removing label {label_list} for {metric_type} {name}")
+                metric.remove(*label_list)
+
+    def remove_gauge_by_label_value(self, name: str, value: str):
+        self._remove_metric_by_label_value(self.gauges, "gauge", name, value)
+                
+    def remove_counter_by_label_value(self, name: str, value: str):
+        self._remove_metric_by_label_value(self.counters, "counter", name, value)
+                
+    def remove_histogram_by_label_value(self, name: str, value: str):
+        self._remove_metric_by_label_value(self.histograms, "histogram", name, value)
