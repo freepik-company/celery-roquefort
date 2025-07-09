@@ -58,7 +58,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_sent",
             "Sent when a task message is published.",
-            labels=["name", "hostname", "queue_name"],
+            labels=["name", "queue_name"],
         )
         self._metrics.create_counter(
             "task_received",
@@ -402,7 +402,6 @@ class Roquefort:
             
         labels = {
             "name": event.get("name"),
-            "hostname": event.get("hostname"),
             "queue_name": queue_name,
         }
 
