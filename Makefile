@@ -1,5 +1,19 @@
 .PHONY: help setup install dev run docker-build docker-run clean
 
+check-uv: ## Check if uv is installed
+	@if ! uv --version > /dev/null 2>&1; then \
+		echo "uv is not installed. Please install it using 'pip install uv'."; \
+		exit 1; \
+	fi
+
+uv-venv: ## Create a virtual environment with uv if not exists
+	@if [ ! -d .venv ]; then \
+		uv venv; \
+	fi
+
+uv-sync: ## Sync dependencies with uv
+	uv sync
+
 # Default target
 help: ## Show this help message
 	@echo "Available commands:"
@@ -12,8 +26,13 @@ setup: ## Set up development environment
 
 install: setup ## Install dependencies (alias for setup)
 
-dev: ## Run the application in development mode
-	uv run python src/roquefort.py
+install-dev: uv-venv ## Install dependencies in development mode
+	@echo "Installing dependencies in development mode..."
+	uv pip install -e .
+	@echo "Dependencies installed in development mode!"
+
+dev: uv-venv uv-sync ## Run the application in development mode with provided arguments
+	@ uv run roquefort $(PARAMS)
 
 run: dev ## Run the application (alias for dev)
 

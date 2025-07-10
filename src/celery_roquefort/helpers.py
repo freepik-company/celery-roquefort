@@ -54,16 +54,6 @@ def get_queue_name_from_worker_metadata(worker: str, metadata: dict) -> str:
     return queues[0]
 
 
-exception_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(")
-
-
-def get_exception_name(message: str) -> str:
-    match = exception_re.match(message)
-    if match:
-        return match.group(1)
-    return "unknown"
-
-
 def is_valid_transport(transport: str) -> bool:
     """Check if the transport is valid.
 

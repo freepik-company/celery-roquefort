@@ -3,6 +3,7 @@ import threading
 import time
 from typing import Callable, Dict, Any
 from queue import Queue
+import socket
 
 
 class ThreadManager:
@@ -70,7 +71,7 @@ class ThreadManager:
         thread.start()
         logging.info(f"Started background thread: {name}")
         
-    def start_event_consumer_thread(self, roquefort_instance):
+    def start_event_consumer_thread(self, roquefort_instance: "Roquefort"): # type: ignore
         """Start the event consumer thread."""
         def event_consumer_worker():
             logging.debug("Starting event consumer thread")
@@ -101,7 +102,10 @@ class ThreadManager:
                     # Simple approach: recreate the whole receiver when it fails
                     with roquefort_instance._app.connection() as connection:
                         recv = roquefort_instance._app.events.Receiver(connection, handlers=handlers)
-                        recv.capture(limit=None, timeout=1.0, wakeup=True)
+                        recv.capture(limit=None, timeout=roquefort_instance._broker_connection_timeout, wakeup=True)
+                except socket.timeout:
+                    logging.warning("Broker connection timeout")
+                    time.sleep(1)
                 except Exception as e:
                     # Any error including kombu warnings will cause recreation
                     logging.warning(f"event receiver disconnected, recreating: {e} - {type(e)}")
