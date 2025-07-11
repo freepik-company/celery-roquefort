@@ -11,8 +11,15 @@ services:
   server:
     build:
       context: .
+      dockerfile: Dockerfile
     ports:
       - 8000:8000
+    environment:
+      CR_BROKER_URL: redis://127.0.0.1:6379/0
+      CR_HOST: 0.0.0.0
+      CR_PORT: 8001
+      TZ: UTC
+      CR_VERBOSE: 1
 
 # The commented out section below is an example of how to define a PostgreSQL
 # database that your application can use. `depends_on` tells Docker Compose to
