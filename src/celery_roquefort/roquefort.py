@@ -410,7 +410,7 @@ class Roquefort:
             logging.warning(f"failed to parse task sent event: {e}")
             logging.error(f"event: {event}")
 
-        if not self._should_monitor_queue(task_sent_event.queue_name):
+        if not self._should_monitor_queue(task_sent_event.get_queue_name(self._workers_metadata, self._default_queue_name)):
             return
 
         self._handle_task_generic(
@@ -424,7 +424,7 @@ class Roquefort:
         task_received_event = TaskReceivedCeleryEvent(**event)
         logging.info(f"task received event parsed: {task_received_event}")
 
-        queue_name = task_received_event.get_queue_name(self._workers_metadata)
+        queue_name = task_received_event.get_queue_name(self._workers_metadata, self._default_queue_name)
 
         if not self._should_monitor_queue(queue_name):
             logging.info(f"task received event not monitored: {queue_name}")
@@ -556,7 +556,7 @@ class Roquefort:
         except Exception as e:
             logging.warning(f"failed to parse task retried event: {e}")
 
-        if not self._should_monitor_queue(task_retried_event.queue_name):
+        if not self._should_monitor_queue(task_retried_event.get_queue_name(self._workers_metadata, self._default_queue_name)):
             return
             
         worker_name, _ = get_worker_names(task_retried_event.hostname)
@@ -568,7 +568,7 @@ class Roquefort:
                 "name": task_retried_event.name,
                 "worker": worker_name,
                 "hostname": task_retried_event.hostname,
-                "queue_name": task_retried_event.queue_name,
+                "queue_name": task_retried_event.get_queue_name(self._workers_metadata, self._default_queue_name),
                 "exception": task_retried_event.get_exception_name(),
             },
         )
@@ -698,9 +698,6 @@ class Roquefort:
             logging.info(f"worker status event parsed: {worker_status_event}")
         except Exception as e:
             logging.warning(f"failed to parse worker status event: {e}")
-        # event_type = event.get("type")
-        # hostname = event.get("hostname")
-        # worker_name, _ = get_worker_names(hostname)
 
         logging.debug(
             f"received event {worker_status_event.event_type} for worker {worker_status_event.worker_name}")

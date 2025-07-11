@@ -71,7 +71,6 @@ class TaskRetriedCeleryEvent(BaseCeleryEvent):
         return self.__get_exception_name(self.exception)
 
 
-
 class WorkerHeartbeatCeleryEvent(BaseCeleryEvent):
     """Worker heartbeat event."""
 
@@ -118,8 +117,6 @@ class TaskSentCeleryEvent(BaseCeleryEvent):
     def get_labels(self, workers_metadata: dict, default_queue_name: str) -> dict:
         return {
             "name": self.name,
-            "hostname": self.hostname,
-            "worker": self.worker_name,
             "queue_name": self.get_queue_name(workers_metadata, default_queue_name),
         }
 
