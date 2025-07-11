@@ -35,6 +35,7 @@ class MetricService:
 
     def set_gauge(self, name: str, value: Union[int, float, bool], labels: dict = None):
         labels = labels or {}
+        logging.info(f"setting gauge {name} with value {value} and labels {labels}")
         if name not in self.gauges:
             logging.warning(f"gauge {name} not found. skipping")
             return

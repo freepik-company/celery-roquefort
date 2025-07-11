@@ -2,6 +2,9 @@ import logging
 import re
 from celery.utils import nodesplit  # type: ignore
 
+UNKNOWN_WORKER_NAME = "unknown"
+UNKNOWN_HOSTNAME = "unknown"
+
 
 def format_queue_names(queue_names: list[str]) -> str:
     """Format a list of queue names into a string.
@@ -20,7 +23,7 @@ def get_worker_names(name: str) -> tuple[str, str]:
         workername, hostname = nodesplit(name)
     except Exception as e:
         logging.error(f"error getting worker names from {name}: {e}")
-        return "unknown", "unknown"
+        return UNKNOWN_WORKER_NAME, UNKNOWN_HOSTNAME
     return workername, hostname
 
 
