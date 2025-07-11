@@ -1,3 +1,9 @@
+## 0.14.0 (2025-07-11)
+
+### Feat
+
+- avoid useless calls on event handlers to Celery broker (#33)
+
 ## 0.13.0 (2025-07-09)
 
 ### Feat
