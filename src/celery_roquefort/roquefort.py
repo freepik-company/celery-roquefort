@@ -85,7 +85,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_failed",
             "Sent if the task failed.",
-            labels=["name", "worker", "hostname", "queue_name", "exception"],
+            labels=["worker", "hostname", "queue_name", "exception"],
         )
         self._metrics.create_counter(
             "task_retried",
@@ -95,12 +95,12 @@ class Roquefort:
         self._metrics.create_counter(
             "task_rejected",
             "Sent if the task was rejected.",
-            labels=["name", "worker", "hostname", "queue_name"],
+            labels=["worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_revoked",
             "Sent if the task was revoked.",
-            labels=["name", "worker", "hostname", "queue_name"],
+            labels=["worker", "hostname", "queue_name"],
         )
         #   Gauges
         self._metrics.create_gauge(
@@ -130,7 +130,7 @@ class Roquefort:
         self._metrics.create_histogram(
             "task_runtime",
             "Histogram of task runtime measurements.",
-            labels=["name", "hostname", "queue_name"],
+            labels=["hostname", "queue_name"],
         )
 
     def _purger(self):
@@ -437,12 +437,10 @@ class Roquefort:
         )
 
     def _handle_task_started(self, event):
-        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -453,10 +451,8 @@ class Roquefort:
     
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_started",
             labels={
-                "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -466,29 +462,22 @@ class Roquefort:
     def _handle_task_succeeded(self, event):
         logging.info(f"task succeeded event: {event}")
         
-        task: Task = self._get_task_from_event(event)
-        logging.info(f"task parsed: {task}")
-
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-        
+
         if not self._should_monitor_queue(queue_name):
             return
         
         worker_name, _ = get_worker_names(hostname)
-        task_name = getattr(task, "name")
         runtime = event.get("runtime")
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_succeeded",
             labels={
-                "name": task_name,
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -500,7 +489,6 @@ class Roquefort:
                 name="task_runtime",
                 value=runtime,
                 labels={
-                    "name": task_name,
                     "hostname": hostname,
                     "queue_name": queue_name,
                 },
@@ -510,13 +498,10 @@ class Roquefort:
 
     def _handle_task_failed(self, event):
         logging.info(f"task failed event: {event}")
-        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
-        # puedo sacar queue_name del metadata de del worker?
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -524,8 +509,7 @@ class Roquefort:
             return
         
         worker_name, _ = get_worker_names(hostname)
-        # revisar si en el event viene el exception o en el task
-        exception = getattr(task, "exception", None) or event.get("exception")
+        exception = event.get("exception")
         exception_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(")
 
 
@@ -537,11 +521,8 @@ class Roquefort:
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_failed",
             labels={
-                # revisar si en el event viene el exception o en el task
-                "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -574,12 +555,12 @@ class Roquefort:
         )
 
     def _handle_task_rejected(self, event):
-        task: Task = self._get_task_from_event(event)
+        # task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            # getattr(task, "queue", None) or
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -590,10 +571,10 @@ class Roquefort:
     
         self._handle_task_generic(
             event=event,
-            task=task,
+            # task=task,
             metric_name="task_rejected",
             labels={
-                "name": getattr(task, "name"),
+                # "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -601,12 +582,12 @@ class Roquefort:
         )
 
     def _handle_task_revoked(self, event):
-        task: Task = self._get_task_from_event(event)
+        # task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            # getattr(task, "queue", None) or
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -617,10 +598,10 @@ class Roquefort:
         
         self._handle_task_generic(
             event=event,
-            task=task,
+             # task=task,
             metric_name="task_revoked",
             labels={
-                "name": getattr(task, "name"),
+                # "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
