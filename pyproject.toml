@@ -18,10 +18,10 @@ dependencies = [
 ]
 
 [project.scripts]
-roquefort = "src.cli:main"
+roquefort = "celery_roquefort.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src/celery_roquefort"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"

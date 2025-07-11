@@ -4,7 +4,7 @@ import json
 import sys
 import os
 from typing import Dict, Any
-from .roquefort import Roquefort
+from celery_roquefort.roquefort import Roquefort
 
 
 def parse_custom_labels(ctx, param, value):
@@ -166,7 +166,10 @@ def main(
     if verbose:
         import logging
 
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
         click.echo(f"Environment prefix: {env_prefix}")
         click.echo(f"Starting Roquefort with broker: {broker_url}")
         click.echo(f"Server will run on {host}:{port}")

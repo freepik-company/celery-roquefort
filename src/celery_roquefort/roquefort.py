@@ -1,23 +1,28 @@
 import asyncio
+import re
 import logging
-from pprint import pp, pformat, pprint
-import time
-from celery import Celery, Task
-from fastapi import FastAPI
-from celery.events import EventReceiver as Receiver
 
-from .helpers import (
-    format_queue_names,
-    get_exception_name,
+import time
+from typing import List
+from celery import Celery, Task
+
+from celery_roquefort.helpers import (
     get_queue_length,
     get_queue_name_from_worker_metadata,
     get_worker_names,
     is_valid_transport,
 )
 
-from .metrics.metrics import MetricService
-from .server.server import FastAPIServer, HttpServer
-from .thread_manager import ThreadManager
+from celery_roquefort.metrics.metrics import MetricService
+from celery_roquefort.server.server import FastAPIServer, HttpServer
+from celery_roquefort.thread_manager import ThreadManager
+from celery_roquefort.models import (
+    TaskRetriedCeleryEvent, 
+    WorkerHeartbeatCeleryEvent, 
+    TaskSentCeleryEvent, 
+    TaskReceivedCeleryEvent,
+    WorkerStatusCeleryEvent,
+)
 
 
 class Roquefort:
@@ -33,6 +38,7 @@ class Roquefort:
         worker_heartbeat_timeout: int = 60,
         queue_length_interval: int = 10,
         queues: list[str] = None,
+        broker_connection_timeout: int = 10,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -52,6 +58,7 @@ class Roquefort:
         self._host = host
         self._port = port
         self._last_event_timestamp = None
+        self._broker_connection_timeout = broker_connection_timeout
 
         # Create metrics
         #   Counters
@@ -78,7 +85,7 @@ class Roquefort:
         self._metrics.create_counter(
             "task_failed",
             "Sent if the task failed.",
-            labels=["name", "worker", "hostname", "queue_name", "exception"],
+            labels=["worker", "hostname", "queue_name", "exception"],
         )
         self._metrics.create_counter(
             "task_retried",
@@ -88,12 +95,12 @@ class Roquefort:
         self._metrics.create_counter(
             "task_rejected",
             "Sent if the task was rejected.",
-            labels=["name", "worker", "hostname", "queue_name"],
+            labels=["worker", "hostname", "queue_name"],
         )
         self._metrics.create_counter(
             "task_revoked",
             "Sent if the task was revoked.",
-            labels=["name", "worker", "hostname", "queue_name"],
+            labels=["worker", "hostname", "queue_name"],
         )
         #   Gauges
         self._metrics.create_gauge(
@@ -123,7 +130,7 @@ class Roquefort:
         self._metrics.create_histogram(
             "task_runtime",
             "Histogram of task runtime measurements.",
-            labels=["name", "hostname", "queue_name"],
+            labels=["hostname", "queue_name"],
         )
 
     def _purger(self):
@@ -374,7 +381,7 @@ class Roquefort:
             logging.info("Roquefort stopped")
 
     def _handle_task_generic(
-        self, event: dict, task: Task, metric_name: str, labels: dict = {}
+        self, event: dict, metric_name: str, task: Task=None, labels: dict = {}
     ):
         event_type = event.get("type")
 
@@ -394,60 +401,46 @@ class Roquefort:
             logging.exception(f"error setting {metric_name} metric: {e}")
 
     def _handle_task_sent(self, event):
-        task: Task = self._get_task_from_event(event)
-        queue_name = event.get("queue") or self._default_queue_name
 
-        if not self._should_monitor_queue(queue_name):
+        logging.debug(f"task sent event: {event}")
+        try:
+            task_sent_event = TaskSentCeleryEvent(**event)
+            logging.debug(f"task sent event parsed: {task_sent_event}")
+        except Exception as e:
+            logging.warning(f"failed to parse task sent event: {e}")
+            logging.error(f"event: {event}")
+
+        if not self._should_monitor_queue(task_sent_event.get_queue_name(self._workers_metadata, self._default_queue_name)):
             return
-            
-        labels = {
-            "name": event.get("name"),
-            "queue_name": queue_name,
-        }
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_sent",
-            labels=labels,
+            labels=task_sent_event.get_labels(self._workers_metadata, self._default_queue_name),
         )
 
     def _handle_task_received(self, event):
-        task: Task = self._get_task_from_event(event)
-        queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(
-                event.get("hostname"), self._workers_metadata
-            )
-            or self._default_queue_name
-        )
-        
+
+        task_received_event = TaskReceivedCeleryEvent(**event)
+        logging.info(f"task received event parsed: {task_received_event}")
+
+        queue_name = task_received_event.get_queue_name(self._workers_metadata, self._default_queue_name)
+
         if not self._should_monitor_queue(queue_name):
+            logging.info(f"task received event not monitored: {queue_name}")
             return
-
-        worker_name, _ = get_worker_names(event.get("hostname"))
-
-        labels = {
-            "name": event.get("name"),
-            "worker": worker_name,
-            "hostname": event.get("hostname"),
-            "queue_name": queue_name,
-        }
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_received",
-            labels=labels,
+            labels=task_received_event.get_labels(self._workers_metadata, self._default_queue_name),
         )
 
     def _handle_task_started(self, event):
-        task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -458,10 +451,8 @@ class Roquefort:
     
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_started",
             labels={
-                "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -469,28 +460,24 @@ class Roquefort:
         )
 
     def _handle_task_succeeded(self, event):
-        task: Task = self._get_task_from_event(event)
-
+        logging.info(f"task succeeded event: {event}")
+        
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
-        
+
         if not self._should_monitor_queue(queue_name):
             return
         
         worker_name, _ = get_worker_names(hostname)
-        task_name = getattr(task, "name")
         runtime = event.get("runtime")
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_succeeded",
             labels={
-                "name": task_name,
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -502,22 +489,19 @@ class Roquefort:
                 name="task_runtime",
                 value=runtime,
                 labels={
-                    "name": task_name,
                     "hostname": hostname,
                     "queue_name": queue_name,
                 },
             )
         except Exception as e:
             logging.exception(f"error setting task_runtime metric: {e}")
-                
 
     def _handle_task_failed(self, event):
-        task: Task = self._get_task_from_event(event)
+        logging.info(f"task failed event: {event}")
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -525,59 +509,58 @@ class Roquefort:
             return
         
         worker_name, _ = get_worker_names(hostname)
-        exception = getattr(task, "exception", None) or event.get("exception")
-        exception_name = get_exception_name(exception)
+        exception = event.get("exception")
+        exception_re = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\(")
+
+
+        def get_exception_name(message: str) -> str:
+            match = exception_re.match(message)
+            if match:
+                return match.group(1)
+            return "unknown"
 
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_failed",
             labels={
-                "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
-                "exception": exception_name,
+                "exception": get_exception_name(exception),
             },
         )
 
     def _handle_task_retried(self, event):
-        task: Task = self._get_task_from_event(event)
+        try:
+            task_retried_event = TaskRetriedCeleryEvent(**event)
+            logging.info(f"task retried event parsed: {task_retried_event}")
+        except Exception as e:
+            logging.warning(f"failed to parse task retried event: {e}")
 
-        hostname = event.get("hostname")
-        queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
-
-        if not self._should_monitor_queue(queue_name):
+        if not self._should_monitor_queue(task_retried_event.get_queue_name(self._workers_metadata, self._default_queue_name)):
             return
             
-        worker_name, _ = get_worker_names(hostname)
-        exception = getattr(task, "exception", None) or event.get("exception")
-        exception_name = get_exception_name(exception)
+        worker_name, _ = get_worker_names(task_retried_event.hostname)
     
         self._handle_task_generic(
             event=event,
-            task=task,
             metric_name="task_retried",
             labels={
-                "name": getattr(task, "name"),
+                "name": task_retried_event.name,
                 "worker": worker_name,
-                "hostname": hostname,
-                "queue_name": queue_name,
-                "exception": exception_name,
+                "hostname": task_retried_event.hostname,
+                "queue_name": task_retried_event.get_queue_name(self._workers_metadata, self._default_queue_name),
+                "exception": task_retried_event.get_exception_name(),
             },
         )
 
     def _handle_task_rejected(self, event):
-        task: Task = self._get_task_from_event(event)
+        # task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            # getattr(task, "queue", None) or
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -588,10 +571,10 @@ class Roquefort:
     
         self._handle_task_generic(
             event=event,
-            task=task,
+            # task=task,
             metric_name="task_rejected",
             labels={
-                "name": getattr(task, "name"),
+                # "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -599,12 +582,12 @@ class Roquefort:
         )
 
     def _handle_task_revoked(self, event):
-        task: Task = self._get_task_from_event(event)
+        # task: Task = self._get_task_from_event(event)
 
         hostname = event.get("hostname")
         queue_name = (
-            getattr(task, "queue", None)
-            or get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+            # getattr(task, "queue", None) or
+            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
             or self._default_queue_name
         )
 
@@ -615,10 +598,10 @@ class Roquefort:
         
         self._handle_task_generic(
             event=event,
-            task=task,
+             # task=task,
             metric_name="task_revoked",
             labels={
-                "name": getattr(task, "name"),
+                # "name": getattr(task, "name"),
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -626,6 +609,14 @@ class Roquefort:
         )
 
     def _handle_worker_heartbeat(self, event):
+        
+        
+        try:
+            heartbeat_event = WorkerHeartbeatCeleryEvent(**event)
+            logging.info(f"worker heartbeat event parsed: {heartbeat_event}")
+        except Exception as e:
+            logging.warning(f"failed to parse worker heartbeat event: {e}")
+            
         logging.debug(f"worker heartbeat received from {event.get('hostname')}")
 
         # Update last event timestamp
@@ -681,40 +672,34 @@ class Roquefort:
         # todo: add metrics handling for processed tasks.
 
     def _handle_worker_status(self, event):
-        event_type = event.get("type")
-        hostname = event.get("hostname")
-        worker_name, _ = get_worker_names(hostname)
+        logging.info(f"worker status event: {event}")
+        
+        try:
+            worker_status_event = WorkerStatusCeleryEvent(**event)
+            logging.info(f"worker status event parsed: {worker_status_event}")
+        except Exception as e:
+            logging.warning(f"failed to parse worker status event: {e}")
 
-        logging.debug(f"received event {event_type} for worker {hostname}")
+        logging.debug(
+            f"received event {worker_status_event.event_type} for worker {worker_status_event.worker_name}")
 
         # Update last event timestamp
         self._last_event_timestamp = time.time()
 
-        if event_type == "worker-online" and hostname not in self._workers_metadata:
-            self._load_worker_metadata(hostname)
+        if (
+            worker_status_event.event_type == "worker-online" and 
+            worker_status_event.hostname not in self._workers_metadata
+        ):
+            self._load_worker_metadata(worker_status_event.hostname)
 
-        queue_name = (
-            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
-        
-        if not self._should_monitor_queue(queue_name):
+        if not self._should_monitor_queue(worker_status_event.get_queue_name(self._workers_metadata, self._default_queue_name)):
             return
-            
-        value = 0
-
-        if event_type == "worker-online":
-            value = 1
 
         try:
             self._metrics.set_gauge(
                 name="worker_active",
-                value=value,
-                labels={
-                    "hostname": hostname,
-                    "worker": worker_name,
-                    "queue_name": queue_name,
-                },
+                value=worker_status_event.value,
+                labels=worker_status_event.get_labels(self._workers_metadata, self._default_queue_name),
             )
         except Exception as e:
             logging.exception(f"error setting worker_active metric in worker status handler: {e}")
