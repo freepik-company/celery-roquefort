@@ -448,11 +448,13 @@ class Roquefort:
             return
         
         worker_name, _ = get_worker_names(hostname)
+        task_name = event.get("name")
     
         self._handle_task_generic(
             event=event,
             metric_name="task_started",
             labels={
+                "name": task_name,
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
@@ -472,12 +474,14 @@ class Roquefort:
             return
         
         worker_name, _ = get_worker_names(hostname)
+        task_name = event.get("name")
         runtime = event.get("runtime")
 
         self._handle_task_generic(
             event=event,
             metric_name="task_succeeded",
             labels={
+                "name": task_name,
                 "worker": worker_name,
                 "hostname": hostname,
                 "queue_name": queue_name,
