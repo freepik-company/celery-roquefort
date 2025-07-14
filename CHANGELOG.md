@@ -1,3 +1,9 @@
+## 0.14.1 (2025-07-14)
+
+### Fix
+
+- **roquefort.py**: adds name label to received total, started_total, succeeded_total and retried_total metrics (#35)
+
 ## 0.14.0 (2025-07-11)
 
 ### Feat
