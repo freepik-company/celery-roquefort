@@ -17,6 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
+RUN echo "PYTHON_VERSION: ${PYTHON_VERSION}"
 
 # Create a non-privileged user that the app will run under.
 # See https://docs.docker.com/go/dockerfile-user-best-practices/
@@ -36,16 +37,18 @@ RUN adduser \
 # into this layer.
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
-    python -m pip install -r requirements.txt
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=src,target=src \
+    --mount=type=bind,source=README.md,target=README.md \
+    python -m pip install .
 
 # Switch to the non-privileged user to run the application.
 USER appuser
 
-# Copy the source code into the container.
-COPY ./src ./src
-
 # Expose the port that the application listens on.
-EXPOSE 8000
+EXPOSE $CR_PORT
+
+FROM base as app
 
 # Run the application.
-CMD python -m src.cli
+CMD roquefort
