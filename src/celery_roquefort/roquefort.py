@@ -39,6 +39,7 @@ class Roquefort:
         queue_length_interval: int = 10,
         queues: list[str] = None,
         broker_connection_timeout: int = 10,
+        queue_names_mapping: dict = None,
     ) -> None:
         self._broker_url = broker_url
         self._metrics: MetricService = MetricService(
@@ -59,6 +60,7 @@ class Roquefort:
         self._port = port
         self._last_event_timestamp = None
         self._broker_connection_timeout = broker_connection_timeout
+        self._queue_names_mapping = queue_names_mapping
 
         # Create metrics
         #   Counters
@@ -626,7 +628,7 @@ class Roquefort:
         # Update last event timestamp
         self._last_event_timestamp = time.time()
 
-        hostname = event.get("hostname")
+        hostname = heartbeat_event.hostname
         worker_name, _ = get_worker_names(hostname)
 
         if hostname in self._workers_metadata:
@@ -634,10 +636,15 @@ class Roquefort:
         else:
             self._load_worker_metadata(hostname)
 
-        queue_name = (
-            get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
-            or self._default_queue_name
-        )
+        queue_name = get_queue_name_from_worker_metadata(hostname, self._workers_metadata)
+        if queue_name:
+            logging.info(f"queue name for worker from metadata {hostname} is {queue_name}")
+        elif not queue_name and self._queue_names_mapping:
+            queue_name = self._queue_names_mapping.get(hostname, self._default_queue_name)
+            logging.info(f"queue name for worker from mapping {hostname} is {queue_name}")
+        else:
+            queue_name = self._default_queue_name
+            logging.info(f"queue name for worker from default {hostname} is {queue_name}")
         
         if not self._should_monitor_queue(queue_name):
             return

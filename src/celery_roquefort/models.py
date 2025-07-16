@@ -89,6 +89,18 @@ class WorkerHeartbeatCeleryEvent(BaseCeleryEvent):
     type: Optional[str] = None
     local_received: Optional[float] = None
 
+    def extract_queue_from_worker(self, workers_metadata: dict, default_queue_name: str) -> str:
+        
+        return get_queue_name_from_worker_metadata(self.hostname, workers_metadata) or default_queue_name
+
+
+    def get_labels(self, workers_metadata: dict, default_queue_name: str) -> dict:
+        return {
+            "hostname": self.hostname,
+            "worker": self.worker_name,
+            "queue_name": self.get_queue_name(workers_metadata, default_queue_name),
+        }
+
 
 class TaskSentCeleryEvent(BaseCeleryEvent):
     """Task sent event."""
