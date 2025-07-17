@@ -1,3 +1,11 @@
+## 0.15.0 (2025-07-17)
+
+### Feat
+
+- adds QUEUE_NAMES_MAPPING mapping for worker_active gauge metric (#36)
+
+## 0.11.6 (2025-07-15)
+
 ## 0.14.1 (2025-07-14)
 
 ### Fix
