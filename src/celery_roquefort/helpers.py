@@ -1,5 +1,4 @@
 import logging
-import re
 from celery.utils import nodesplit  # type: ignore
 
 UNKNOWN_WORKER_NAME = "unknown"

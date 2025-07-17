@@ -34,6 +34,20 @@ def parse_custom_labels(ctx, param, value):
         raise click.BadParameter(f"Error parsing custom labels: {e}")
 
 
+def parse_dict(ctx, param, value):
+    """Parse queue names mapping from JSON or Python dict."""
+    if not value:
+        return {}
+
+    try:
+        with open(value, "r") as f:
+            result = f.read()
+        
+        return eval(result)
+    except Exception as e:
+        raise click.BadParameter(f"Error reading queue names mapping file {value}: {e}")
+
+
 @click.command()
 @click.option(
     "--env-prefix",
@@ -97,6 +111,14 @@ def parse_custom_labels(ctx, param, value):
     help="Queues to monitor. Env: CR_QUEUES",
 )
 @click.version_option(version="0.1.0", prog_name="roquefort")
+@click.option(
+    "--queue-names-mapping",
+    "-m",
+    callback=parse_dict,
+    default=None,
+    envvar="CR_QUEUE_NAMES_MAPPING",
+    help="Queue names mapping. Env: CR_QUEUE_NAMES_MAPPING",
+)
 def main(
     env_prefix: str,
     broker_url: str,
@@ -107,6 +129,7 @@ def main(
     verbose: bool,
     default_queue_name: str = "unknown-queue",
     queues: str = None,
+    queue_names_mapping: str = None,
 ):
     """
     Celery Roquefort - Prometheus metrics collector for Celery tasks and workers.
@@ -129,6 +152,7 @@ def main(
     CR_VERBOSE        - Enable verbose logging (set to 1)
     CR_ENV_PREFIX     - Change the environment variable prefix
     CR_QUEUES         - Queues to be monitored by roquefort. Comma separated values
+    CR_QUEUE_NAMES_MAPPING - Worker hostname to queue name mapping. JSON or Python dict.
 
     Examples:
 
@@ -142,6 +166,7 @@ def main(
     export CR_HOST=127.0.0.1
     export CR_PORT=9090
     export CR_QUEUES=queue1,queue2,queue3
+    export CR_QUEUE_NAMES_MAPPING=./queue_names_mapping.json
     roquefort
 
     \b
@@ -160,6 +185,10 @@ def main(
     # Using custom environment prefix
     export API_BROKER_URL=redis://localhost:6379/0
     roquefort --env-prefix API_ --broker-url will-be-overridden
+
+    \b
+    # With queue names mapping
+    roquefort -b redis://localhost:6379/0 -m ./queue_names_mapping.json
     """
 
     # Show environment variable information if verbose
@@ -212,6 +241,7 @@ def main(
             custom_labels=custom_labels,
             default_queue_name=default_queue_name,
             queues=queues,
+            queue_names_mapping=queue_names_mapping,
         )
 
         click.echo("🧀 Starting Roquefort metrics collector...")
