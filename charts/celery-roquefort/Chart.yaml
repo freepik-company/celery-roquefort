@@ -3,7 +3,7 @@ name: celery-roquefort
 description: A Helm chart for Celery Roquefort
 type: application
 version: 0.8.0
-appVersion: 0.14.1
+appVersion: 0.15.0
 home: https://github.com/freepik-company/celery-roquefort
 keywords:
   - celerty
